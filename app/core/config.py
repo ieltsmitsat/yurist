@@ -42,6 +42,16 @@ class Settings(BaseSettings):
 
     # Database & Redis
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/yurist_db"
+    
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def parse_database_url(cls, v: str) -> str:
+        if v and v.startswith("postgres://"):
+            return v.replace("postgres://", "postgresql+asyncpg://", 1)
+        if v and v.startswith("postgresql://"):
+            return v.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return v
+
     REDIS_URL: str = "redis://localhost:6379/0"
 
     # AI Configuration (Gemini primary, OpenAI fallback)
