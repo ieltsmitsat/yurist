@@ -1,0 +1,348 @@
+"""Legal inquiry handlers for text and voice messages."""
+
+import asyncio
+import logging
+import re
+from pathlib import Path
+from tempfile import NamedTemporaryFile
+from typing import Any
+
+from aiogram import Bot, F, Router
+from aiogram.types import Message
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.bot.i18n import t
+from app.bot.keyboards.keyboards import cta_keyboard, phone_request_kb
+from app.core.config import settings
+from app.db.models.user import User
+from app.services.chat_service import ChatService
+from app.services.inquiry_service import InquiryService
+from app.services.user_service import UserService
+
+logger = logging.getLogger(__name__)
+
+router = Router(name="inquiry_router")
+inquiry_service = InquiryService()
+
+
+async def _simulate_typing(bot: Bot, chat_id: int, duration: float = 1.5) -> None:
+    """Simulate realistic human typing indicator in Telegram."""
+    try:
+        await bot.send_chat_action(chat_id=chat_id, action="typing")
+        await asyncio.sleep(duration)
+    except Exception as e:  # noqa: BLE001
+        logger.debug("Typing action simulation failed: %s", e)
+
+
+async def _send_safe_response(
+    message: Message,
+    text: str,
+    reply_markup: Any = None,
+) -> None:
+    """Send legal response safely handling length limits and markdown/HTML formatting."""
+    # Convert markdown bold **text** to <b>text</b>
+    cleaned = re.sub(r"\*\*(.*?)\*\*", r"<b>\1</b>", text)
+
+    max_len = 3900
+    if len(cleaned) <= max_len:
+        try:
+            await message.answer(cleaned, reply_markup=reply_markup, parse_mode="HTML")
+        except Exception:  # noqa: BLE001
+            await message.answer(text, reply_markup=reply_markup, parse_mode=None)
+        return
+
+    # Split into paragraphs if longer
+    chunks: list[str] = []
+    current: str = ""
+    for paragraph in cleaned.split("\n\n"):
+        if len(current) + len(paragraph) + 2 > max_len:
+            if current:
+                chunks.append(current.strip())
+            current = paragraph + "\n\n"
+        else:
+            current += paragraph + "\n\n"
+    if current:
+        chunks.append(current.strip())
+
+    for idx, chunk in enumerate(chunks):
+        kb = reply_markup if idx == len(chunks) - 1 else None
+        try:
+            await message.answer(chunk, reply_markup=kb, parse_mode="HTML")
+        except Exception:  # noqa: BLE001
+            await message.answer(chunk, reply_markup=kb, parse_mode=None)
+
+
+async def _notify_admin_high_risk(
+    bot: Bot,
+    user: User,
+    question: str,
+    risk_score: int,
+) -> None:
+    """Send immediate alert to lawyer/admin group for high-risk cases."""
+    if not settings.ADMIN_GROUP_ID:
+        return
+
+    alert_text = (
+        "🚨 <b>DIQQAT: YUQORI XAVFLI YANGI LID (HIGH RISK)!</b>\n\n"
+        f"👤 <b>Mijoz:</b> {user.full_name or 'Noma\'lum'}\n"
+        f"📱 <b>Telefon:</b> {user.phone_number or 'Ko\'rsatilmagan'}\n"
+        f"🔴 <b>Xavf bali:</b> {risk_score}/100\n"
+        f"💬 <b>Savol:</b> {question[:300]}...\n\n"
+        "👉 Advokat aralashuvi va zudlik bilan qo'ng'iroq qilish tavsiya etiladi."
+    )
+    try:
+        await bot.send_message(chat_id=settings.ADMIN_GROUP_ID, text=alert_text)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Failed to send high-risk alert to admin group: %s", e)
+
+
+async def _check_preconditions(
+    message: Message,
+    user: User | None,
+    phone_key: str = "phone_required",
+    balance_key: str = "balance_exhausted",
+) -> bool:
+    """Check phone verification and question balance. Returns True if user can proceed."""
+    lang = user.language if user else "uz"
+
+    if (not user or not user.phone_number) and message.chat.type == "private":
+        await message.answer(
+            t(phone_key, lang), reply_markup=phone_request_kb(lang)
+        )
+        return False
+
+    if user and not await UserService.has_questions_available(user):
+        await message.answer(
+            t(balance_key, lang), reply_markup=cta_keyboard("consultation", lang)
+        )
+        return False
+
+    return True
+
+
+@router.message(F.text.in_(["💬 Yuridik savol berish", "💬 Задать правовой вопрос"]))
+async def handle_inquiry_button_click(
+    message: Message,
+    user: User | None = None,
+) -> None:
+    """Handle click on 'Ask Legal Question' button from main menu."""
+    if not message.from_user or not user:
+        return
+
+    if not await _check_preconditions(
+        message, user, phone_key="phone_required_button"
+    ):
+        return
+
+    lang = user.language if user else "uz"
+    await message.answer(t("inquiry_invite", lang))
+
+
+@router.message(
+    F.text
+    & ~F.text.startswith("/")
+    & ~F.text.in_(
+        [
+            "💬 Yuridik savol berish",
+            "💬 Задать правовой вопрос",
+            "📑 Hujjat auditi",
+            "📑 Аудит документа",
+            "💼 Xizmatlar va Narxlar",
+            "💼 Услуги и Цены",
+            "👥 Taklif qilish (+1 savol)",
+            "👥 Пригласить (+1 вопрос)",
+            "🆘 Favqulodda yordam (SOS)",
+            "🆘 Экстренная помощь (SOS)",
+            "⚙️ Sozlamalar",
+            "⚙️ Настройки",
+        ]
+    )
+)
+async def handle_text_inquiry(
+    message: Message,
+    session: AsyncSession,
+    bot: Bot,
+    user: User | None = None,
+) -> None:
+    """Handle text legal inquiry with Undetectable AI Persona."""
+    if not message.from_user or not message.text or not user:
+        return
+
+    if not await _check_preconditions(message, user):
+        return
+
+    lang = user.language if user else "uz"
+
+    # Log incoming user message
+    await ChatService.log_message(
+        session=session,
+        user_id=user.id,
+        telegram_id=user.telegram_id,
+        sender_type="user",
+        text=message.text,
+        telegram_message_id=message.message_id,
+    )
+
+    # Handle greetings gracefully without consuming free question balance
+    clean_text = message.text.strip().lower()
+    greetings = {
+        "salom",
+        "assalomu alaykum",
+        "assalom",
+        "assalomu aleykum",
+        "salomalaykum",
+        "privet",
+        "привет",
+        "здравствуйте",
+        "добрый день",
+    }
+    if clean_text in greetings:
+        greet_reply = t("greeting_reply", lang)
+        await message.answer(greet_reply)
+        await ChatService.log_message(
+            session=session,
+            user_id=user.id,
+            telegram_id=user.telegram_id,
+            sender_type="bot",
+            text=greet_reply,
+        )
+        return
+
+    if len(clean_text) < 6:
+        too_short_msg = t("too_short", lang)
+        await message.answer(too_short_msg)
+        await ChatService.log_message(
+            session=session,
+            user_id=user.id,
+            telegram_id=user.telegram_id,
+            sender_type="bot",
+            text=too_short_msg,
+        )
+        return
+
+    # 3. Simulate human typing
+    typing_delay = min(max(len(message.text) * 0.005, 1.0), 2.5)
+    await _simulate_typing(bot, message.chat.id, duration=typing_delay)
+
+    # 4. Process inquiry with AI Persona & RAG
+    try:
+        _inquiry, analysis = await inquiry_service.process_text_inquiry(
+            session=session,
+            user=user,
+            question_text=message.text,
+        )
+
+        # 5. Send legal response safely
+        reply_kb = (
+            cta_keyboard(analysis.cta_type, lang)
+            if analysis.is_legal_case and analysis.cta_type != "none"
+            else None
+        )
+        await _send_safe_response(message, analysis.response_text, reply_kb)
+        await ChatService.log_message(
+            session=session,
+            user_id=user.id,
+            telegram_id=user.telegram_id,
+            sender_type="bot",
+            text=analysis.response_text,
+        )
+
+        # 6. Notify admin if high risk
+        if analysis.is_legal_case and analysis.risk_level == "high":
+            await _notify_admin_high_risk(bot, user, message.text, analysis.risk_score)
+
+    except Exception as e:  # noqa: BLE001
+        logger.error("Error handling text inquiry: %s", e)
+        err_msg = t("error_text_inquiry", lang)
+        await message.answer(err_msg)
+
+
+@router.message(F.voice)
+async def handle_voice_inquiry(
+    message: Message,
+    session: AsyncSession,
+    bot: Bot,
+    user: User | None = None,
+) -> None:
+    """Handle voice memo inquiry (STT via Gemini + Legal analysis)."""
+    if not message.from_user or not message.voice or not user:
+        return
+
+    if not await _check_preconditions(
+        message, user,
+        phone_key="phone_required_voice",
+        balance_key="balance_exhausted_voice",
+    ):
+        return
+
+    lang = user.language if user else "uz"
+
+    # Download voice memo into temp file safely
+    with NamedTemporaryFile(suffix=".ogg", delete=False) as temp_file:
+        temp_path = Path(temp_file.name)
+
+    try:
+        await bot.send_chat_action(chat_id=message.chat.id, action="record_voice")
+        file_info = await bot.get_file(message.voice.file_id)
+        if file_info.file_path:
+            await bot.download_file(file_info.file_path, destination=temp_path)
+
+        # Transcribe & process
+        await _simulate_typing(bot, message.chat.id, duration=1.5)
+        inquiry, analysis = await inquiry_service.process_voice_inquiry(
+            session=session,
+            user=user,
+            audio_path=temp_path,
+        )
+
+        reply_kb = (
+            cta_keyboard(analysis.cta_type, lang)
+            if analysis.is_legal_case and analysis.cta_type != "none"
+            else None
+        )
+        response_text = analysis.response_text
+        if inquiry.stt_transcript:
+            response_text = f'{t("voice_transcript_prefix", lang, transcript=inquiry.stt_transcript[:100])}\n\n{response_text}'
+
+        await _send_safe_response(message, response_text, reply_kb)
+
+        # Log voice message and bot reply
+        await ChatService.log_message(
+            session=session,
+            user_id=user.id,
+            telegram_id=user.telegram_id,
+            sender_type="user",
+            text=inquiry.stt_transcript or "[Ovozli murojaat]",
+            message_type="voice",
+            telegram_message_id=message.message_id,
+        )
+        await ChatService.log_message(
+            session=session,
+            user_id=user.id,
+            telegram_id=user.telegram_id,
+            sender_type="bot",
+            text=analysis.response_text,
+        )
+
+        if analysis.is_legal_case and analysis.risk_level == "high":
+            await _notify_admin_high_risk(
+                bot, user, inquiry.stt_transcript or "Ovozli murojaat", analysis.risk_score
+            )
+
+    except Exception as e:  # noqa: BLE001
+        logger.error("Error processing voice inquiry: %s", e)
+        err_msg = t("error_voice_inquiry", lang)
+        await message.answer(err_msg)
+    finally:
+        if temp_path.exists():
+            temp_path.unlink()
+
+
+@router.message(F.photo)
+async def handle_photo_receipt(
+    message: Message,
+    user: User | None = None,
+) -> None:
+    """Handle photo uploads (usually payment receipts)."""
+    lang = user.language if user else "uz"
+    await message.answer(t("photo_receipt", lang))

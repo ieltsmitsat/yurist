@@ -1,0 +1,56 @@
+[project]
+name = "yurist-ai-bot"
+version = "0.1.0"
+description = "AI-Powered, Sales-Oriented, Undetectable LegalTech Telegram Bot & Web CRM System"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "aiogram>=3.17.0",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.34.0",
+    "pydantic-settings>=2.7.0",
+    "pydantic>=2.10.0",
+    "sqlalchemy[asyncio]>=2.0.36",
+    "asyncpg>=0.30.0",
+    "pgvector>=0.3.6",
+    "alembic>=1.14.0",
+    "redis>=5.2.1",
+    "apscheduler>=3.11.0",
+    "openai>=1.60.0",
+    "google-genai>=2.25.0",
+    "httpx>=0.28.1",
+    "pypdf>=5.2.0",
+    "python-docx>=1.1.2",
+    "python-multipart>=0.0.20",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.4",
+    "pytest-asyncio>=0.25.2",
+    "mypy>=1.14.1",
+    "ruff>=0.9.3",
+    "aiosqlite>=0.20.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.mypy]
+python_version = "3.12"
+strict = false
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

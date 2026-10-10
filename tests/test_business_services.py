@@ -1,0 +1,248 @@
+"""Tests for business services: UserService, ReferralService, PaymentService."""
+
+from decimal import Decimal
+
+import pytest
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+from app.core.config import settings
+from app.db.base import Base
+from app.db.models.appointment import Appointment
+from app.db.models.attachment import Attachment
+from app.db.models.inquiry import Inquiry
+from app.db.models.service import Service
+from app.db.models.sos import SOSRequest
+from app.db.models.transaction import Transaction
+from app.db.models.user import User
+from app.services.payment_service import PaymentService
+from app.services.referral_service import ReferralService
+from app.services.user_service import UserService
+
+# SQLite async engine for tests
+test_engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+TestingSessionLocal = async_sessionmaker(
+    bind=test_engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+)
+
+
+@pytest.fixture(autouse=True)
+async def setup_db():
+    async with test_engine.begin() as conn:
+        # Create tables (excluding LegalChunk which uses pgvector)
+        tables = [
+            User.__table__,
+            Service.__table__,
+            Inquiry.__table__,
+            Appointment.__table__,
+            Attachment.__table__,
+            Transaction.__table__,
+            SOSRequest.__table__,
+        ]
+        await conn.run_sync(Base.metadata.create_all, tables=tables)
+    yield
+    async with test_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all, tables=tables)
+
+
+@pytest.mark.asyncio
+async def test_user_service_lifecycle():
+    async with TestingSessionLocal() as session:
+        # 1. Create user
+        user, created = await UserService.get_or_create_user(
+            session=session,
+            telegram_id=111222,
+            full_name="Bobur Mirzo",
+            language="uz",
+        )
+        assert created is True
+        assert user.telegram_id == 111222
+        assert user.lead_status == "new"
+        assert user.free_questions_left == settings.FREE_QUESTIONS_LIMIT
+
+        # 2. Get existing user
+        same_user, created_again = await UserService.get_or_create_user(
+            session=session,
+            telegram_id=111222,
+        )
+        assert created_again is False
+        assert same_user.id == user.id
+
+        # 3. Update language
+        await UserService.update_language(session, 111222, "ru")
+        assert same_user.language == "ru"
+
+        # 4. Update phone (Hard Gate Lead Capture)
+        await UserService.update_phone(session, 111222, "+998901234567")
+        assert same_user.phone_number == "+998901234567"
+        assert same_user.lead_status == "verified_lead"
+
+        # 5. Decrement questions
+        assert await UserService.has_questions_available(same_user) is True
+        left = await UserService.decrement_question(session, same_user)
+        assert left == settings.FREE_QUESTIONS_LIMIT - 1
+        assert same_user.free_questions_left == settings.FREE_QUESTIONS_LIMIT - 1
+
+        # 6. Add questions
+        updated = await UserService.add_questions(session, same_user.id, 5)
+        assert updated is not None
+        assert updated.free_questions_left == settings.FREE_QUESTIONS_LIMIT - 1 + 5
+
+
+@pytest.mark.asyncio
+async def test_referral_flow_anti_fraud():
+    async with TestingSessionLocal() as session:
+        # 1. Create referrer
+        referrer, _ = await UserService.get_or_create_user(
+            session=session,
+            telegram_id=1001,
+            full_name="Referrer User",
+        )
+        ref_link = ReferralService.get_referral_link("yurist_bot", referrer)
+        assert "start=ref_1001" in ref_link
+
+        # 2. Friend joins via referral link
+        friend, _ = await UserService.get_or_create_user(
+            session=session,
+            telegram_id=2002,
+            full_name="Friend User",
+            referred_by_code="ref_1001",
+        )
+        assert friend.referred_by_id == referrer.id
+
+        # Before phone verification, referrer should NOT get bonus yet
+        rewarded = await ReferralService.process_referral_reward(session, friend)
+        assert rewarded is None
+        assert referrer.free_questions_left == settings.FREE_QUESTIONS_LIMIT
+
+        # Friend verifies phone number -> Anti-fraud reward is triggered
+        await UserService.update_phone(session, friend.telegram_id, "+998939998877")
+        reward_data = await ReferralService.process_referral_reward(session, friend)
+        assert reward_data == (1001, "uz")
+
+        # Check referrer balance increased by 1
+        refreshed_referrer = await UserService.get_by_telegram_id(session, 1001)
+        assert refreshed_referrer is not None
+        assert refreshed_referrer.free_questions_left == settings.FREE_QUESTIONS_LIMIT + 1
+
+        # Check referral stats
+        stats = await ReferralService.get_referral_stats(session, referrer)
+        assert stats["total_invited"] == 1
+        assert stats["verified_count"] == 1
+        assert stats["bonus_earned"] == 1
+
+        # 3. Existing user joins with referral code -> Gets attributed to referrer
+        existing_user, _ = await UserService.get_or_create_user(
+            session=session,
+            telegram_id=4005,
+            full_name="Existing User",
+        )
+        assert existing_user.referred_by_id is None
+        attributed_user, _ = await UserService.get_or_create_user(
+            session=session,
+            telegram_id=4005,
+            referred_by_code="ref_1001",
+        )
+        assert attributed_user.referred_by_id == referrer.id
+
+        # 4. Anti-fraud: User tries to use SAME phone number -> Referral bonus withheld
+        fraud_user, _ = await UserService.get_or_create_user(
+            session=session,
+            telegram_id=3004,
+            full_name="Fraud Account",
+            referred_by_code="ref_1001",
+        )
+        await UserService.update_phone(session, fraud_user.telegram_id, "+998939998877")
+        fraud_reward = await ReferralService.process_referral_reward(session, fraud_user)
+        assert fraud_reward is None  # Must withhold bonus because phone already existed!
+
+
+def test_phone_normalization_utility():
+    assert UserService.normalize_phone_number("+998 90 123 45 67") == "+998901234567"
+    assert UserService.normalize_phone_number("90 123 45 67") == "+998901234567"
+    assert UserService.normalize_phone_number("998901234567") == "+998901234567"
+    assert UserService.normalize_phone_number("+998901234567") == "+998901234567"
+    assert UserService.normalize_phone_number("+1 (415) 555-2671") == "+14155552671"
+    assert UserService.normalize_phone_number("not a phone number") is None
+    assert UserService.normalize_phone_number("123") is None
+
+
+@pytest.mark.asyncio
+async def test_anti_self_referral():
+    async with TestingSessionLocal() as session:
+        # User tries to refer themselves using ref_7777
+        user, _ = await UserService.get_or_create_user(
+            session=session,
+            telegram_id=7777,
+            referred_by_code="ref_7777",
+        )
+        assert user.referred_by_id is None
+
+
+@pytest.mark.asyncio
+async def test_payment_service():
+    async with TestingSessionLocal() as session:
+        user, _ = await UserService.get_or_create_user(
+            session=session,
+            telegram_id=3003,
+            full_name="Payer User",
+        )
+
+        # Create service
+        service = Service(
+            title_uz="Ekspress Shartnoma Auditi",
+            title_ru="Экспресс аудит договора",
+            price=Decimal("150000.00"),
+            service_type="audit",
+        )
+        session.add(service)
+        await session.commit()
+        await session.refresh(service)
+
+        # Create transaction
+        tx = await PaymentService.create_transaction(
+            session=session,
+            user=user,
+            amount=Decimal("150000.00"),
+            payment_method="p2p_card",
+        )
+        assert tx.id is not None
+        assert tx.payment_status == "pending"
+
+        # Confirm transaction
+        confirmed = await PaymentService.confirm_payment(
+            session=session,
+            transaction_id=tx.id,
+            transaction_ref="BANK_PAY_987654",
+        )
+        assert confirmed is not None
+        assert confirmed.payment_status == "completed"
+        assert confirmed.transaction_ref == "BANK_PAY_987654"
+
+
+@pytest.mark.asyncio
+async def test_lawyer_unlimited_questions():
+    async with TestingSessionLocal() as session:
+        # Mock settings.LAWYER_TELEGRAM_ID
+        orig_lawyer_id = settings.LAWYER_TELEGRAM_ID
+        settings.LAWYER_TELEGRAM_ID = 999888
+        try:
+            lawyer_user, _ = await UserService.get_or_create_user(
+                session=session,
+                telegram_id=999888,
+                full_name="Advokat Iqboljon",
+            )
+            assert UserService.is_lawyer(lawyer_user) is True
+            assert lawyer_user.is_subscribed is True
+
+            # Question availability should always be True even if free_questions_left is 0
+            lawyer_user.free_questions_left = 0
+            assert await UserService.has_questions_available(lawyer_user) is True
+
+            # Decrementing should NOT reduce balance
+            bal = await UserService.decrement_question(session, lawyer_user)
+            assert bal == 0
+            assert lawyer_user.free_questions_left == 0
+        finally:
+            settings.LAWYER_TELEGRAM_ID = orig_lawyer_id

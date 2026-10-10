@@ -1,0 +1,210 @@
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+
+export async function fetchApi<T>(
+  endpoint: string,
+  options?: RequestInit
+): Promise<T> {
+  const res = await fetch(`${API_BASE}${endpoint}`, {
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    ...options,
+  });
+  if (!res.ok) {
+    throw new Error(`API Error ${res.status}: ${res.statusText}`);
+  }
+  return res.json();
+}
+
+// Dashboard
+export const getDashboardStats = () => fetchApi<DashboardStats>("/dashboard/stats");
+export const getLeadPipeline = () => fetchApi<PipelineItem[]>("/dashboard/pipeline");
+export const getRiskBreakdown = () => fetchApi<RiskItem[]>("/dashboard/risk-breakdown");
+export const getUsersChart = (days = 30) => fetchApi<ChartPoint[]>(`/dashboard/users-chart?days=${days}`);
+export const getInquiriesChart = (days = 30) => fetchApi<ChartPoint[]>(`/dashboard/inquiries-chart?days=${days}`);
+export const getRevenueChart = (days = 30) => fetchApi<RevenuePoint[]>(`/dashboard/revenue-chart?days=${days}`);
+export const getReferralAnalytics = () => fetchApi<ReferralAnalytics>("/dashboard/referral-stats");
+
+// CRM
+export const getLeads = (status?: string, limit = 50) =>
+  fetchApi<Lead[]>(`/crm/leads?limit=${limit}${status ? `&lead_status=${status}` : ""}`);
+export const getLeadDetail = (id: number) => fetchApi<LeadDetail>(`/crm/leads/${id}`);
+export const updateLeadStatus = (id: number, lead_status: string) =>
+  fetchApi<{ ok: boolean }>(`/crm/leads/${id}/status`, {
+    method: "PUT",
+    body: JSON.stringify({ lead_status }),
+  });
+
+// Inquiries
+export const getInquiries = (risk?: string, limit = 50) =>
+  fetchApi<Inquiry[]>(`/crm/inquiries?limit=${limit}${risk ? `&risk_level=${risk}` : ""}`);
+export const approveInquiry = (id: number, final_response: string) =>
+  fetchApi<{ ok: boolean }>(`/crm/inquiries/${id}/approve`, {
+    method: "POST",
+    body: JSON.stringify({ final_response }),
+  });
+
+// Services
+export const getServices = () => fetchApi<Service[]>("/services");
+export const createService = (data: Partial<Service>) =>
+  fetchApi<{ ok: boolean; id: number }>("/services", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+export const updateService = (id: number, data: Partial<Service>) =>
+  fetchApi<{ ok: boolean }>(`/services/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+export const deleteService = (id: number) =>
+  fetchApi<{ ok: boolean }>(`/services/${id}`, { method: "DELETE" });
+
+// Transactions
+export const getTransactions = (status?: string, limit = 50) =>
+  fetchApi<Transaction[]>(`/transactions?limit=${limit}${status ? `&payment_status=${status}` : ""}`);
+export const updateTransactionStatus = (id: number, payment_status: string) =>
+  fetchApi<{ ok: boolean }>(`/transactions/${id}/status`, {
+    method: "PUT",
+    body: JSON.stringify({ payment_status }),
+  });
+
+// Types
+export interface DashboardStats {
+  total_users: number;
+  users_today: number;
+  total_inquiries: number;
+  inquiries_today: number;
+  total_revenue: number;
+  pending_payments: number;
+  referred_users: number;
+  subscribers: number;
+}
+
+export interface PipelineItem {
+  status: string;
+  count: number;
+}
+
+export interface RiskItem {
+  level: string;
+  count: number;
+}
+
+export interface ChartPoint {
+  date: string;
+  count: number;
+  [key: string]: string | number;
+}
+
+export interface RevenuePoint {
+  date: string;
+  revenue: number;
+  [key: string]: string | number;
+}
+
+export interface ReferralAnalytics {
+  total_referred: number;
+  verified_referred: number;
+  conversion_rate: number;
+  top_referrers: { full_name: string; telegram_id: number; referral_count: number }[];
+}
+
+export interface Lead {
+  id: number;
+  telegram_id: number;
+  full_name: string | null;
+  phone_number: string | null;
+  language: string;
+  lead_status: string;
+  free_questions_left: number;
+  is_subscribed: boolean;
+  created_at: string | null;
+}
+
+export interface LeadDetail extends Lead {
+  referral_code: string | null;
+  referred_by_id: number | null;
+  inquiry_count: number;
+  referral_count: number;
+}
+
+export interface Inquiry {
+  id: number;
+  user_id: number;
+  question_text: string | null;
+  stt_transcript: string | null;
+  risk_level: string | null;
+  risk_score: number | null;
+  ai_draft_response: string | null;
+  ai_upsell_offer: string | null;
+  final_response: string | null;
+  status: string;
+  created_at: string | null;
+}
+
+export interface Service {
+  id: number;
+  title_uz: string;
+  title_ru: string;
+  description_uz: string | null;
+  description_ru: string | null;
+  price: number;
+  service_type: string;
+  is_active: boolean;
+}
+
+export interface Transaction {
+  id: number;
+  user_id: number;
+  user_name: string;
+  telegram_id: number;
+  amount: number;
+  payment_method: string;
+  payment_status: string;
+  transaction_ref: string | null;
+  inquiry_id: number | null;
+  appointment_id: number | null;
+  created_at: string | null;
+}
+
+// Helplines
+
+export interface Helpline {
+  id: number;
+  organization_uz: string;
+  organization_ru: string;
+  phone_number: string;
+  description_uz: string | null;
+  description_ru: string | null;
+  order: number;
+  is_active: boolean;
+}
+
+export async function getHelplines(): Promise<Helpline[]> {
+  const res = await fetch(`${API_BASE}/helplines`);
+  if (!res.ok) throw new Error("Failed to fetch helplines");
+  return res.json();
+}
+
+export async function createHelpline(data: Partial<Helpline>): Promise<Helpline> {
+  const res = await fetch(`${API_BASE}/helplines`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to create helpline");
+  return res.json();
+}
+
+export async function updateHelpline(id: number, data: Partial<Helpline>): Promise<Helpline> {
+  const res = await fetch(`${API_BASE}/helplines/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to update helpline");
+  return res.json();
+}
+
+export async function deleteHelpline(id: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/helplines/${id}`, { method: "DELETE" });
+  if (!res.ok) throw new Error("Failed to delete helpline");
+}

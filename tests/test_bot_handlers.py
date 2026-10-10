@@ -1,0 +1,457 @@
+"""Tests for Telegram Bot handlers, keyboards, and dispatcher configuration."""
+
+from decimal import Decimal
+
+import pytest
+from aiogram import Dispatcher
+from aiogram.fsm.storage.memory import MemoryStorage
+
+from app.bot.keyboards.keyboards import (
+    cta_keyboard,
+    language_selection_kb,
+    main_menu_kb,
+    payment_methods_kb,
+    phone_request_kb,
+    referral_share_kb,
+    services_catalog_kb,
+    settings_kb,
+    sos_options_kb,
+)
+from app.bot.main import setup_bot_dispatcher
+from app.db.models.service import Service
+
+
+def test_dispatcher_router_registration():
+    dp = Dispatcher(storage=MemoryStorage())
+    setup_bot_dispatcher(dp)
+
+    # Sub-routers included: start, registration, services, referral, sos, helplines, audit, inquiry, business
+    assert len(dp.sub_routers) == 9
+
+
+def test_keyboards_structure():
+    # 1. Language keyboard
+    lang_kb = language_selection_kb()
+    assert len(lang_kb.inline_keyboard[0]) == 2
+    assert lang_kb.inline_keyboard[0][0].callback_data == "set_lang:uz"
+    assert lang_kb.inline_keyboard[0][1].callback_data == "set_lang:ru"
+
+    # 2. Phone request keyboard
+    phone_kb = phone_request_kb("uz")
+    assert phone_kb.keyboard[0][0].request_contact is True
+
+    # 3. Main menu keyboard
+    menu_uz = main_menu_kb("uz")
+    assert len(menu_uz.keyboard) == 4
+    assert menu_uz.keyboard[0][0].text == "💬 Yuridik savol berish"
+
+    menu_ru = main_menu_kb("ru")
+    assert menu_ru.keyboard[0][0].text == "💬 Задать правовой вопрос"
+
+    # 4. CTA keyboard
+    cta_kb = cta_keyboard("audit", "uz")
+    assert any("audit" in btn.callback_data for row in cta_kb.inline_keyboard for btn in row)
+    assert any(
+        "show_referral" in btn.callback_data for row in cta_kb.inline_keyboard for btn in row
+    )
+
+    # 4b. Referral share keyboard
+    ref_kb = referral_share_kb("https://t.me/yurist_bot?start=ref_123", "uz")
+    assert any("https://t.me/share/url" in (btn.url or "") for row in ref_kb.inline_keyboard for btn in row)
+    assert any("refresh_referral" in (btn.callback_data or "") for row in ref_kb.inline_keyboard for btn in row)
+
+    # 5. SOS options keyboard
+    sos_kb = sos_options_kb("uz")
+    assert len(sos_kb.inline_keyboard) == 3
+    assert sos_kb.inline_keyboard[0][0].callback_data == "sos_guide:police"
+
+    # 6. Services catalog keyboard
+    mock_services = [
+        Service(
+            id=1,
+            title_uz="Konsultatsiya",
+            title_ru="Консультация",
+            price=Decimal(100000),
+            service_type="consultation",
+        ),
+        Service(
+            id=2,
+            title_uz="Sudda vakillik",
+            title_ru="Суд",
+            price=Decimal(2000000),
+            service_type="court",
+        ),
+    ]
+    catalog_kb = services_catalog_kb(mock_services, "uz")
+    assert len(catalog_kb.inline_keyboard) == 3
+    assert catalog_kb.inline_keyboard[0][0].callback_data == "buy_service:1"
+    assert catalog_kb.inline_keyboard[2][0].callback_data == "contact_lawyer"
+
+    # 7. Payment methods keyboard
+    pay_kb = payment_methods_kb(1, "uz")
+    assert len(pay_kb.inline_keyboard) == 4
+    assert pay_kb.inline_keyboard[0][0].callback_data == "pay_p2p:1"
+    assert pay_kb.inline_keyboard[1][0].callback_data == "pay_stars:1"
+    assert pay_kb.inline_keyboard[3][0].callback_data == "back_to_services"
+
+    # 8. Settings keyboard
+    set_kb = settings_kb("uz")
+    assert len(set_kb.inline_keyboard) == 2
+    assert set_kb.inline_keyboard[0][0].callback_data == "settings:change_lang"
+
+
+@pytest.mark.asyncio
+async def test_contact_submission_success():
+    from unittest.mock import AsyncMock, MagicMock
+
+    from app.bot.handlers.public.registration import handle_contact_submission
+
+    message = MagicMock()
+    message.from_user.id = 555666
+    message.contact.user_id = 555666
+    message.contact.phone_number = "901234567"
+    message.answer = AsyncMock()
+
+    session = AsyncMock()
+    bot = MagicMock()
+
+    mock_user = MagicMock()
+    mock_user.language = "uz"
+    mock_user.phone_number = "+998901234567"
+    mock_user.free_questions_left = 3
+
+    from app.services.referral_service import ReferralService
+    from app.services.user_service import UserService
+
+    orig_update_phone = UserService.update_phone
+    orig_reward = ReferralService.process_referral_reward
+    UserService.update_phone = AsyncMock(return_value=mock_user)
+    ReferralService.process_referral_reward = AsyncMock(return_value=None)
+
+    try:
+        await handle_contact_submission(message, session, bot, user=mock_user)
+        assert message.answer.called
+        call_text = message.answer.call_args[0][0]
+        assert "Telefon raqamingiz muvaffaqiyatli tasdiqlandi" in call_text
+        assert "+998901234567" in call_text
+    finally:
+        UserService.update_phone = orig_update_phone
+        ReferralService.process_referral_reward = orig_reward
+
+
+@pytest.mark.asyncio
+async def test_contact_spoofing_prevented():
+    from unittest.mock import AsyncMock, MagicMock
+
+    from app.bot.handlers.public.registration import handle_contact_submission
+
+    message = MagicMock()
+    message.from_user.id = 555666
+    message.contact.user_id = 999999  # Different person's contact!
+    message.contact.phone_number = "+998909999999"
+    message.answer = AsyncMock()
+
+    session = AsyncMock()
+    bot = MagicMock()
+    mock_user = MagicMock()
+    mock_user.language = "uz"
+
+    await handle_contact_submission(message, session, bot, user=mock_user)
+    assert message.answer.called
+    call_text = message.answer.call_args[0][0]
+    assert "o'zingizning shaxsiy telefon raqamingizni yuboring" in call_text
+
+
+@pytest.mark.asyncio
+async def test_text_phone_submission_success():
+    from unittest.mock import AsyncMock, MagicMock
+
+    from app.bot.handlers.public.registration import handle_text_phone_submission
+    from app.services.referral_service import ReferralService
+    from app.services.user_service import UserService
+
+    message = MagicMock()
+    message.from_user.id = 777888
+    message.text = "+998 90 777 88 99"
+    message.answer = AsyncMock()
+
+    session = AsyncMock()
+    bot = MagicMock()
+
+    unverified_user = MagicMock()
+    unverified_user.phone_number = None
+    unverified_user.language = "uz"
+
+    verified_user = MagicMock()
+    verified_user.language = "uz"
+    verified_user.phone_number = "+998907778899"
+    verified_user.free_questions_left = 3
+
+    orig_update_phone = UserService.update_phone
+    orig_reward = ReferralService.process_referral_reward
+    UserService.update_phone = AsyncMock(return_value=verified_user)
+    ReferralService.process_referral_reward = AsyncMock(return_value=None)
+
+    try:
+        await handle_text_phone_submission(message, session, bot, user=unverified_user)
+        assert message.answer.called
+        call_text = message.answer.call_args[0][0]
+        assert "Telefon raqamingiz muvaffaqiyatli tasdiqlandi" in call_text
+        assert "+998907778899" in call_text
+    finally:
+        UserService.update_phone = orig_update_phone
+        ReferralService.process_referral_reward = orig_reward
+
+
+@pytest.mark.asyncio
+async def test_user_context_middleware_resolves_update():
+    from unittest.mock import AsyncMock, MagicMock
+
+    from aiogram.types import Chat, Message, Update
+    from aiogram.types import User as TgUser
+
+    from app.bot.middlewares.user_middleware import UserContextMiddleware
+    from app.services.user_service import UserService
+
+    middleware = UserContextMiddleware()
+    update = Update(
+        update_id=100,
+        message=Message(
+            message_id=1,
+            date=123,
+            chat=Chat(id=111, type="private"),
+            from_user=TgUser(id=111, is_bot=False, first_name="Ali"),
+            text="Savol",
+        ),
+    )
+
+    mock_db_user = MagicMock()
+    mock_db_user.id = 1
+    mock_db_user.telegram_id = 111
+    mock_db_user.phone_number = "+998901112233"
+
+    orig_get_or_create = UserService.get_or_create_user
+    UserService.get_or_create_user = AsyncMock(return_value=(mock_db_user, False))
+
+    async def dummy_handler(evt, data):
+        return data.get("user")
+
+    data = {"session": AsyncMock()}
+    try:
+        res = await middleware(dummy_handler, update, data)
+        assert res is not None
+        assert res.telegram_id == 111
+        assert res.phone_number == "+998901112233"
+    finally:
+        UserService.get_or_create_user = orig_get_or_create
+
+
+@pytest.mark.asyncio
+async def test_handle_inquiry_button_click_verified_user():
+    from unittest.mock import AsyncMock, MagicMock
+
+    from app.bot.handlers.public.inquiry import handle_inquiry_button_click
+
+    message = MagicMock()
+    message.from_user.id = 111
+    message.answer = AsyncMock()
+
+    verified_user = MagicMock()
+    verified_user.language = "uz"
+    verified_user.phone_number = "+998901234567"
+    verified_user.free_questions_left = 3
+    verified_user.is_subscribed = False
+
+    await handle_inquiry_button_click(message, user=verified_user)
+    assert message.answer.called
+    response = message.answer.call_args[0][0]
+    assert "Yuridik savol berish" in response
+    assert "Savolingizni matn yoki ovozli xabar" in response
+
+
+@pytest.mark.asyncio
+async def test_handle_inquiry_button_click_unverified_user():
+    from unittest.mock import AsyncMock, MagicMock
+
+    from app.bot.handlers.public.inquiry import handle_inquiry_button_click
+
+    message = MagicMock()
+    message.from_user.id = 111
+    message.chat.type = "private"
+    message.answer = AsyncMock()
+
+    unverified_user = MagicMock()
+    unverified_user.language = "uz"
+    unverified_user.phone_number = None
+
+    await handle_inquiry_button_click(message, user=unverified_user)
+    assert message.answer.called
+    response = message.answer.call_args[0][0]
+    assert "telefon raqamingizni yuboring" in response
+
+
+@pytest.mark.asyncio
+async def test_handle_referral_menu_and_callback():
+    from unittest.mock import AsyncMock, MagicMock
+
+    from app.bot.handlers.public.referral import handle_referral_callback, handle_referral_menu
+
+    # 1. Test handle_referral_menu
+    message = MagicMock()
+    message.from_user.id = 12345
+    message.answer = AsyncMock()
+
+    bot = MagicMock()
+    bot.get_me = AsyncMock()
+    bot.get_me.return_value.username = "test_yurist_bot"
+
+    user = MagicMock()
+    user.id = 1
+    user.telegram_id = 12345
+    user.referral_code = "ref_12345"
+    user.language = "uz"
+    user.free_questions_left = 3
+
+    session = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.scalar_one.return_value = 0
+    session.execute.return_value = mock_result
+
+    await handle_referral_menu(message, session, bot, user)
+    assert message.answer.called
+    text = message.answer.call_args[0][0]
+    kb = message.answer.call_args[1]["reply_markup"]
+    assert "Do'stlarni Taklif Qilish Dasturi" in text
+    assert "ref_12345" in text
+    assert "https://t.me/share/url" in kb.inline_keyboard[0][0].url
+
+    from aiogram.types import Message
+
+    # 2. Test handle_referral_callback (show_referral)
+    callback = MagicMock()
+    callback.data = "show_referral"
+    callback.from_user.id = 12345
+    callback.answer = AsyncMock()
+    callback.message = MagicMock(spec=Message)
+    callback.message.answer = AsyncMock()
+
+    await handle_referral_callback(callback, session, bot, user)
+    assert callback.answer.called
+    assert callback.message.answer.called
+    cb_text = callback.message.answer.call_args[0][0]
+    assert "Do'stlarni Taklif Qilish Dasturi" in cb_text
+
+    # 3. Test handle_referral_callback (refresh_referral)
+    refresh_cb = MagicMock()
+    refresh_cb.data = "refresh_referral"
+    refresh_cb.from_user.id = 12345
+    refresh_cb.answer = AsyncMock()
+    refresh_cb.message = MagicMock(spec=Message)
+    refresh_cb.message.edit_text = AsyncMock()
+
+    await handle_referral_callback(refresh_cb, session, bot, user)
+    assert refresh_cb.answer.called
+    assert refresh_cb.message.edit_text.called
+
+
+@pytest.mark.asyncio
+async def test_services_and_pricing_handlers():
+    from decimal import Decimal
+    from unittest.mock import AsyncMock, MagicMock
+
+    from aiogram.types import Message
+
+    from app.bot.handlers.public.services import (
+        handle_back_to_services,
+        handle_buy_service,
+        handle_order_service_cta,
+        handle_p2p_payment,
+        handle_services_menu,
+    )
+    from app.db.models.service import Service
+
+    message = MagicMock()
+    message.answer = AsyncMock()
+
+    mock_service = Service(
+        id=10,
+        title_uz="Test Konsultatsiya",
+        title_ru="Тест Консультация",
+        description_uz="Batafsil tahlil va maslahat",
+        description_ru="Подробный анализ",
+        price=Decimal("150000.00"),
+        service_type="consultation",
+        is_active=True,
+    )
+
+    session = AsyncMock()
+    user = MagicMock()
+    user.language = "uz"
+    user.id = 1
+    user.full_name = "Sinovchi Mijoz"
+    user.phone_number = "+998901234567"
+
+    # 1. Services menu
+    mock_res = MagicMock()
+    mock_res.scalars.return_value.all.return_value = [mock_service]
+    session.execute.return_value = mock_res
+
+    await handle_services_menu(message, session, user)
+    assert message.answer.called
+    menu_text = message.answer.call_args[0][0]
+    assert "Yuridik Xizmatlar" in menu_text
+
+    # 2. Buy service details
+    cb = MagicMock()
+    cb.data = "buy_service:10"
+    cb.message = MagicMock(spec=Message)
+    cb.message.edit_text = AsyncMock()
+    cb.answer = AsyncMock()
+
+    mock_scalar = MagicMock()
+    mock_scalar.scalar_one_or_none.return_value = mock_service
+    session.execute.return_value = mock_scalar
+
+    await handle_buy_service(cb, session, user)
+    assert cb.message.edit_text.called
+    details_text = cb.message.edit_text.call_args[0][0]
+    assert "Test Konsultatsiya" in details_text
+    assert "150 000 so'm" in details_text
+
+    # 3. Back to services
+    back_cb = MagicMock()
+    back_cb.data = "back_to_services"
+    back_cb.message = MagicMock(spec=Message)
+    back_cb.message.edit_text = AsyncMock()
+    back_cb.answer = AsyncMock()
+
+    session.execute.return_value = mock_res
+    await handle_back_to_services(back_cb, session, user)
+    assert back_cb.message.edit_text.called
+
+    # 4. Order service CTA
+    cta_cb = MagicMock()
+    cta_cb.data = "order_service:consultation"
+    cta_cb.message = MagicMock(spec=Message)
+    cta_cb.message.answer = AsyncMock()
+    cta_cb.answer = AsyncMock()
+
+    session.execute.return_value = mock_scalar
+    await handle_order_service_cta(cta_cb, session, user)
+    assert cta_cb.message.answer.called
+
+    # 5. P2P Payment
+    p2p_cb = MagicMock()
+    p2p_cb.data = "pay_p2p:10"
+    p2p_cb.message = MagicMock(spec=Message)
+    p2p_cb.message.answer = AsyncMock()
+    p2p_cb.answer = AsyncMock()
+
+    bot = MagicMock()
+    bot.send_message = AsyncMock()
+
+    await handle_p2p_payment(p2p_cb, session, bot, user)
+    assert p2p_cb.message.answer.called
+    p2p_text = p2p_cb.message.answer.call_args[0][0]
+    assert "Karta orqali to'lov" in p2p_text
+

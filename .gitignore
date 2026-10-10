@@ -1,0 +1,41 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Database
+*.db
+*.sqlite3
+yurist.db
+
+# Node
+node_modules/
+admin/.next/
+admin/out/
+admin/build/
+.npm/
+
+# IDEs & Agents
+.idea/
+.vscode/
+.cursor/
+.kiro/
+.impeccable/
+.gemini/
+.agent/
+.agents/
+.obsidian/
+.codex/
+skills-lock.json
+
+# OS
+.DS_Store
+Thumbs.db
