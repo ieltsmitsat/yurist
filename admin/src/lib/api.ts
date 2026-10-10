@@ -169,6 +169,8 @@ export interface Transaction {
 
 export interface Helpline {
   id: number;
+  category_uz: string | null;
+  category_ru: string | null;
   organization_uz: string;
   organization_ru: string;
   phone_number: string;
