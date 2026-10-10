@@ -172,10 +172,12 @@ async def handle_p2p_payment(
     # Notify admin / lawyer about new pending transaction
     notify_chat = settings.ADMIN_GROUP_ID or settings.LAWYER_TELEGRAM_ID
     if notify_chat:
+        _p2p_name = user.full_name or "Noma'lum"
+        _p2p_phone = user.phone_number or "Kiritilmagan"
         alert = (
             "💼 <b>YANGI XIZMAT BUYURTMASI (P2P Karta)</b>\n\n"
-            f"👤 <b>Mijoz:</b> {user.full_name or 'Noma\'lum'}\n"
-            f"📱 <b>Telefon:</b> {user.phone_number or 'Kiritilmagan'}\n"
+            f"👤 <b>Mijoz:</b> {_p2p_name}\n"
+            f"📱 <b>Telefon:</b> {_p2p_phone}\n"
             f"💼 <b>Xizmat:</b> {service.title_uz}\n"
             f"💵 <b>Summa:</b> {price_fmt}\n"
             f"🔢 <b>Tranzaksiya:</b> #{tx.id}\n\n"
@@ -237,10 +239,12 @@ async def handle_stars_payment(
     # Notify admin / lawyer about Stars invoice request
     notify_chat = settings.ADMIN_GROUP_ID or settings.LAWYER_TELEGRAM_ID
     if notify_chat:
+        _stars_name = user.full_name or "Noma'lum"
+        _stars_phone = user.phone_number or "Kiritilmagan"
         alert = (
             "⭐ <b>YANGI BUYURTMA (Telegram Stars)</b>\n\n"
-            f"👤 <b>Mijoz:</b> {user.full_name or 'Noma\'lum'}\n"
-            f"📱 <b>Telefon:</b> {user.phone_number or 'Kiritilmagan'}\n"
+            f"👤 <b>Mijoz:</b> {_stars_name}\n"
+            f"📱 <b>Telefon:</b> {_stars_phone}\n"
             f"💼 <b>Xizmat:</b> {service.title_uz}\n"
             f"💵 <b>Summa:</b> {price_fmt}\n"
             f"🔢 <b>Tranzaksiya:</b> #{tx.id}"

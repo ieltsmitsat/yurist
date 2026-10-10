@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  allowedDevOrigins: ['192.168.0.163'],
+  allowedDevOrigins: ['*', '*.e2b.app', 'localhost', '127.0.0.1'],
   async rewrites() {
     return [
       {
@@ -10,7 +10,17 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "Access-Control-Allow-Origin", value: "*" },
+          { key: "X-Frame-Options", value: "ALLOWALL" },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;
-

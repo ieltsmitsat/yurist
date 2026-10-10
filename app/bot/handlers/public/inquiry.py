@@ -82,10 +82,12 @@ async def _notify_admin_high_risk(
     if not settings.ADMIN_GROUP_ID:
         return
 
+    _name = user.full_name or "Noma'lum"
+    _phone = user.phone_number or "Ko'rsatilmagan"
     alert_text = (
         "🚨 <b>DIQQAT: YUQORI XAVFLI YANGI LID (HIGH RISK)!</b>\n\n"
-        f"👤 <b>Mijoz:</b> {user.full_name or 'Noma\'lum'}\n"
-        f"📱 <b>Telefon:</b> {user.phone_number or 'Ko\'rsatilmagan'}\n"
+        f"👤 <b>Mijoz:</b> {_name}\n"
+        f"📱 <b>Telefon:</b> {_phone}\n"
         f"🔴 <b>Xavf bali:</b> {risk_score}/100\n"
         f"💬 <b>Savol:</b> {question[:300]}...\n\n"
         "👉 Advokat aralashuvi va zudlik bilan qo'ng'iroq qilish tavsiya etiladi."
