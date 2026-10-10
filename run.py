@@ -6,7 +6,7 @@ import logging
 
 import uvicorn
 from aiogram.exceptions import TelegramNetworkError
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 
 import app.db.models  # noqa: F401 - register all SQLAlchemy models
 from app.api.main import app as fastapi_app
@@ -32,6 +32,8 @@ async def init_database() -> None:
     """Create tables and seed legal knowledge base if empty."""
     logger.info("Initializing database tables...")
     async with engine.begin() as conn:
+        if "postgres" in settings.DATABASE_URL:
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         await conn.run_sync(Base.metadata.create_all)
 
     # Seed if legal chunks empty
