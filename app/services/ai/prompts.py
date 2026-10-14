@@ -66,7 +66,7 @@ class PromptManager:
                     if k not in data:
                         data[k] = v
                 return data
-        except Exception:
+        except Exception:  # noqa: BLE001
             return DEFAULT_PROMPTS
             
     @classmethod

@@ -82,7 +82,7 @@ async def update_prompts(payload: PromptsUpdate) -> dict[str, Any]:
     try:
         PromptManager.save_all(payload.prompts)
         return {"prompts": PromptManager.get_all()}
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update prompts: {e}",

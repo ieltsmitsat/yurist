@@ -86,7 +86,7 @@ async def handle_business_message(
                 if file_info.file_path:
                     await bot.download_file(file_info.file_path, destination=temp_path)
                 question_text = await speech_service.transcribe_audio(temp_path, language="uz")
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.error("Failed to transcribe business voice message: %s", e)
             finally:
                 if temp_path.exists():
@@ -154,6 +154,6 @@ async def handle_business_message(
                 is_business=True,
             )
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error("Failed to generate or send business reply: %s", e)
 

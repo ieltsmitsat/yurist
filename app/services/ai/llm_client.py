@@ -64,13 +64,11 @@ class LLMService:
         )
 
         models_to_try = [
+            "gemini-3.5-flash-lite",
             target_model,
             settings.GEMINI_FALLBACK_MODEL,
-            "gemini-2.5-flash",
-            "gemini-2.5-flash-lite",
-            "gemini-2.0-flash",
-            "gemini-1.5-flash",
             "gemini-3.1-flash-lite",
+            "gemini-3.5-flash",
             "gemini-3.8-flash",
         ]
         seen: set[str] = set()
@@ -93,12 +91,15 @@ class LLMService:
                         return str(response.text)
                 except Exception as e:  # noqa: BLE001
                     last_error = e
+                    err_str = str(e).lower()
                     logger.warning(
-                        "Model %s (attempt %d) failed (%s). Retrying...",
+                        "Model %s (attempt %d) failed (%s).",
                         mod,
                         attempt + 1,
                         e,
                     )
+                    if "404" in err_str or "not found" in err_str or "no longer available" in err_str:
+                        break
                     await asyncio.sleep(0.5)
 
         # Optional OpenAI fallback if configured

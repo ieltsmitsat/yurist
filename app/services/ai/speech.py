@@ -66,9 +66,12 @@ class SpeechService:
                 audio_part = types.Part.from_bytes(data=audio_bytes, mime_type=mime_type)
 
                 for model_name in [
-                    "gemini-3.5-transcribe",
                     settings.GEMINI_MODEL,
+                    "gemini-3.5-flash-lite",
                     settings.GEMINI_FALLBACK_MODEL,
+                    "gemini-3.1-flash-lite",
+                    "gemini-3.5-flash",
+                    "gemini-3.8-flash",
                 ]:
                     try:
                         response = await self.client.aio.models.generate_content(

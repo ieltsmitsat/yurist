@@ -34,7 +34,7 @@ class HelplineResponse(HelplineBase):
         from_attributes = True
 
 @router.get("", response_model=list[HelplineResponse])
-async def get_helplines(db: AsyncSession = Depends(get_db_session)) -> Any:
+async def get_helplines(db: AsyncSession = Depends(get_db_session)) -> Any:  # noqa: B008
     """Get all helplines."""
     stmt = select(Helpline).order_by(Helpline.order.asc(), Helpline.id.desc())
     result = await db.execute(stmt)
@@ -42,7 +42,7 @@ async def get_helplines(db: AsyncSession = Depends(get_db_session)) -> Any:
 
 @router.post("", response_model=HelplineResponse)
 async def create_helpline(
-    helpline_in: HelplineCreate, db: AsyncSession = Depends(get_db_session)
+    helpline_in: HelplineCreate, db: AsyncSession = Depends(get_db_session)  # noqa: B008
 ) -> Any:
     """Create new helpline."""
     helpline = Helpline(**helpline_in.model_dump())
@@ -53,7 +53,7 @@ async def create_helpline(
 
 @router.put("/{helpline_id}", response_model=HelplineResponse)
 async def update_helpline(
-    helpline_id: int, helpline_in: HelplineUpdate, db: AsyncSession = Depends(get_db_session)
+    helpline_id: int, helpline_in: HelplineUpdate, db: AsyncSession = Depends(get_db_session)  # noqa: B008
 ) -> Any:
     """Update a helpline."""
     helpline = await db.get(Helpline, helpline_id)
@@ -68,7 +68,7 @@ async def update_helpline(
     return helpline
 
 @router.delete("/{helpline_id}")
-async def delete_helpline(helpline_id: int, db: AsyncSession = Depends(get_db_session)) -> Any:
+async def delete_helpline(helpline_id: int, db: AsyncSession = Depends(get_db_session)) -> Any:  # noqa: B008
     """Delete a helpline."""
     helpline = await db.get(Helpline, helpline_id)
     if not helpline:
