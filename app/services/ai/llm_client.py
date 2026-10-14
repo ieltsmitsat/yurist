@@ -63,13 +63,12 @@ class LLMService:
             automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
         )
 
+        # Hardcoded reliable models first, then dynamic config models as fallback
         models_to_try = [
-            "gemini-3.5-flash-lite",
+            "gemini-3.5-flash-lite",  # Most reliable as of Oct 2026
             target_model,
             settings.GEMINI_FALLBACK_MODEL,
             "gemini-3.1-flash-lite",
-            "gemini-3.5-flash",
-            "gemini-3.8-flash",
         ]
         seen: set[str] = set()
         unique_models: list[str] = []
@@ -80,7 +79,7 @@ class LLMService:
 
         last_error: Exception | None = None
         for mod in unique_models:
-            for attempt in range(2):
+            for attempt in range(3):
                 try:
                     response = await self.client.aio.models.generate_content(
                         model=mod,
@@ -88,6 +87,7 @@ class LLMService:
                         config=config,
                     )
                     if response and response.text:
+                        logger.info("Model %s succeeded on attempt %d.", mod, attempt + 1)
                         return str(response.text)
                 except Exception as e:  # noqa: BLE001
                     last_error = e
@@ -98,9 +98,11 @@ class LLMService:
                         attempt + 1,
                         e,
                     )
+                    # Skip model entirely on 404 / deprecated
                     if "404" in err_str or "not found" in err_str or "no longer available" in err_str:
                         break
-                    await asyncio.sleep(0.5)
+                    # Exponential backoff on 503 (1s, 2s, 4s)
+                    await asyncio.sleep(min(2 ** attempt, 4))
 
         # Optional OpenAI fallback if configured
         if settings.OPENAI_API_KEY and settings.OPENAI_API_KEY != "dummy_openai_key":
