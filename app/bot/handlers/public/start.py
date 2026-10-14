@@ -51,7 +51,23 @@ async def handle_start(message: Message, session: AsyncSession, user: User | Non
             "Assalomu alaykum! Muloqot tilini tanlang:\n\n"
             "Здравствуйте! Выберите язык общения:"
         )
+        from app.services.chat_service import ChatService
+
+        await ChatService.log_message(
+            session=session,
+            user_id=current_user.id,
+            telegram_id=current_user.telegram_id,
+            sender_type="user",
+            text=message.text or "/start",
+        )
         await message.answer(greeting, reply_markup=language_selection_kb())
+        await ChatService.log_message(
+            session=session,
+            user_id=current_user.id,
+            telegram_id=current_user.telegram_id,
+            sender_type="bot",
+            text=greeting,
+        )
     else:
         # Returning user with verified phone
         lang = current_user.language

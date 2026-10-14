@@ -56,13 +56,13 @@ class Settings(BaseSettings):
 
     # AI Configuration (Gemini primary, OpenAI fallback)
     GEMINI_API_KEY: str = Field(default="dummy_gemini_key")
-    GEMINI_MODEL: str = "gemini-3.1-flash-lite"
-    GEMINI_FALLBACK_MODEL: str = "gemini-3.8-flash"
+    GEMINI_MODEL: str = "gemini-2.5-flash"
+    GEMINI_FALLBACK_MODEL: str = "gemini-2.5-flash-lite"
     GEMINI_EMBEDDING_MODEL: str = "gemini-embedding-2"
     OPENAI_API_KEY: str = Field(default="dummy_openai_key")
-    LLM_MODEL: str = "gemini-3.1-flash-lite"
-    LLM_FAST_MODEL: str = "gemini-3.1-flash-lite"
-    WHISPER_MODEL: str = "gemini-3.1-flash-lite"
+    LLM_MODEL: str = "gemini-2.5-flash"
+    LLM_FAST_MODEL: str = "gemini-2.5-flash-lite"
+    WHISPER_MODEL: str = "gemini-2.5-flash"
     EMBEDDING_MODEL: str = "gemini-embedding-2"
 
     # Business Rules

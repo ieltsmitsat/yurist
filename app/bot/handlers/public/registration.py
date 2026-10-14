@@ -67,6 +67,18 @@ async def _complete_registration(
         except Exception as e:  # noqa: BLE001
             logger.warning("Could not notify referrer %d: %s", referrer_telegram_id, e)
 
+    from app.services.chat_service import ChatService
+
+    await ChatService.log_message(
+        session=session,
+        user_id=updated_user.id,
+        telegram_id=updated_user.telegram_id,
+        sender_type="user",
+        text=f"📱 Telefon raqami: {phone}",
+        message_type="contact" if message.contact else "text",
+        telegram_message_id=message.message_id,
+    )
+
     # Send welcome and main menu directly (replaces request_contact keyboard automatically)
     if lang == "uz":
         welcome_text = (
@@ -86,6 +98,13 @@ async def _complete_registration(
         )
 
     await message.answer(welcome_text, reply_markup=main_menu_kb(lang))
+    await ChatService.log_message(
+        session=session,
+        user_id=updated_user.id,
+        telegram_id=updated_user.telegram_id,
+        sender_type="bot",
+        text=welcome_text,
+    )
 
 
 @router.message(F.contact)

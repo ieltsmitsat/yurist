@@ -2,27 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { format } from "date-fns";
-
-interface Dialog {
-  user_id: number;
-  telegram_id: number;
-  full_name: string;
-  phone_number: string | null;
-  language: string;
-  lead_status: string;
-  last_message: string;
-  last_sender: string;
-  last_time: string | null;
-  total_messages: number;
-}
-
-interface Message {
-  id: number;
-  sender_type: "user" | "bot" | "lawyer";
-  message_type: string;
-  text: string;
-  created_at: string;
-}
+import {
+  getDialogs,
+  getMessages,
+  sendLawyerMessage,
+  type Dialog,
+  type ChatMessageItem as Message,
+} from "@/lib/api";
 
 export default function ChatsPage() {
   const [dialogs, setDialogs] = useState<Dialog[]>([]);
@@ -37,16 +23,27 @@ export default function ChatsPage() {
 
   useEffect(() => {
     fetchDialogs();
+    const timer = setInterval(() => {
+      fetchDialogsSilently();
+    }, 5000);
+    return () => clearInterval(timer);
   }, []);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  useEffect(() => {
+    if (!selectedUserId) return;
+    const timer = setInterval(() => {
+      fetchMessagesSilently(selectedUserId);
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [selectedUserId]);
+
   const fetchDialogs = async () => {
     try {
-      const res = await fetch("/api/v1/chats");
-      const data = await res.json();
+      const data = await getDialogs();
       setDialogs(data || []);
     } catch (error) {
       console.error("Failed to fetch dialogs:", error);
@@ -55,16 +52,42 @@ export default function ChatsPage() {
     }
   };
 
+  const fetchDialogsSilently = async () => {
+    try {
+      const data = await getDialogs();
+      if (data) {
+        setDialogs(data);
+      }
+    } catch (error) {
+      console.debug("Silent dialog poll failed:", error);
+    }
+  };
+
   const fetchMessages = async (userId: number) => {
     setLoadingMessages(true);
     try {
-      const res = await fetch(`/api/v1/chats/${userId}`);
-      const data = await res.json();
+      const data = await getMessages(userId);
       setMessages(data || []);
     } catch (error) {
       console.error("Failed to fetch messages:", error);
     } finally {
       setLoadingMessages(false);
+    }
+  };
+
+  const fetchMessagesSilently = async (userId: number) => {
+    try {
+      const data = await getMessages(userId);
+      if (data) {
+        setMessages((prev) => {
+          if (JSON.stringify(prev) !== JSON.stringify(data)) {
+            return data;
+          }
+          return prev;
+        });
+      }
+    } catch (error) {
+      console.debug("Silent messages poll failed:", error);
     }
   };
 
@@ -80,23 +103,27 @@ export default function ChatsPage() {
 
     setSending(true);
     try {
-      const res = await fetch(`/api/v1/chats/${selectedUserId}/send`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: replyText }),
-      });
-      if (res.ok) {
-        const newMessage = await res.json();
-        setMessages((prev) => [...prev, newMessage]);
-        setReplyText("");
-        setDialogs((prev) =>
-          prev.map((d) =>
+      const newMessage = await sendLawyerMessage(selectedUserId, replyText);
+      setMessages((prev) => [...prev, newMessage]);
+      setReplyText("");
+      setDialogs((prev) =>
+        prev
+          .map((d) =>
             d.user_id === selectedUserId
-              ? { ...d, last_message: newMessage.text, last_sender: "lawyer", last_time: newMessage.created_at, total_messages: d.total_messages + 1 }
+              ? {
+                  ...d,
+                  last_message: newMessage.text,
+                  last_sender: "lawyer",
+                  last_time: newMessage.created_at,
+                  total_messages: d.total_messages + 1,
+                }
               : d
-          ).sort((a, b) => new Date(b.last_time || 0).getTime() - new Date(a.last_time || 0).getTime())
-        );
-      }
+          )
+          .sort(
+            (a, b) =>
+              new Date(b.last_time || 0).getTime() - new Date(a.last_time || 0).getTime()
+          )
+      );
     } catch (error) {
       console.error("Error sending message:", error);
     } finally {

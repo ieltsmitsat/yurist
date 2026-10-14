@@ -1,5 +1,4 @@
-"""Abstracted LLM service for Undetectable Legal Consultations and Audits using Google Gemini."""
-
+import asyncio
 import json
 import logging
 from dataclasses import dataclass
@@ -67,6 +66,10 @@ class LLMService:
         models_to_try = [
             target_model,
             settings.GEMINI_FALLBACK_MODEL,
+            "gemini-2.5-flash",
+            "gemini-2.5-flash-lite",
+            "gemini-2.0-flash",
+            "gemini-1.5-flash",
             "gemini-3.1-flash-lite",
             "gemini-3.8-flash",
         ]
@@ -77,23 +80,49 @@ class LLMService:
                 seen.add(m)
                 unique_models.append(m)
 
+        last_error: Exception | None = None
         for mod in unique_models:
-            try:
-                response = await self.client.aio.models.generate_content(
-                    model=mod,
-                    contents=prompt,
-                    config=config,
-                )
-                return response.text or ""
-            except Exception as e:  # noqa: BLE001
-                logger.warning(
-                    "Model %s failed (%s). Retrying next model...",
-                    mod,
-                    e,
-                )
-                continue
+            for attempt in range(2):
+                try:
+                    response = await self.client.aio.models.generate_content(
+                        model=mod,
+                        contents=prompt,
+                        config=config,
+                    )
+                    if response and response.text:
+                        return str(response.text)
+                except Exception as e:  # noqa: BLE001
+                    last_error = e
+                    logger.warning(
+                        "Model %s (attempt %d) failed (%s). Retrying...",
+                        mod,
+                        attempt + 1,
+                        e,
+                    )
+                    await asyncio.sleep(0.5)
 
-        raise RuntimeError("All Gemini models failed to generate response")
+        # Optional OpenAI fallback if configured
+        if settings.OPENAI_API_KEY and settings.OPENAI_API_KEY != "dummy_openai_key":
+            try:
+                from openai import AsyncOpenAI
+
+                openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+                messages = [
+                    {"role": "system", "content": system_instruction},
+                    {"role": "user", "content": prompt},
+                ]
+                resp = await openai_client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=messages,
+                    temperature=temperature,
+                )
+                if resp.choices and resp.choices[0].message.content:
+                    logger.info("Successfully used OpenAI fallback for legal response")
+                    return str(resp.choices[0].message.content)
+            except Exception as e:  # noqa: BLE001
+                logger.error("OpenAI fallback also failed: %s", e)
+
+        raise RuntimeError(f"All Gemini models failed to generate response. Last error: {last_error}")
 
     async def analyze_legal_inquiry(
         self,

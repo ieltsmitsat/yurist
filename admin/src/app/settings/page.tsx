@@ -1,19 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-
-interface BotSettings {
-  lawyer_telegram_id: number | null;
-  admin_group_id: number | null;
-  admin_telegram_ids: string | null;
-}
-
-interface Prompts {
-  PERSONA_SYSTEM_PROMPT_UZ: string;
-  PERSONA_SYSTEM_PROMPT_RU: string;
-  EXPRESS_AUDIT_PROMPT_UZ: string;
-  EXPRESS_AUDIT_PROMPT_RU: string;
-}
+import {
+  getBotSettings,
+  updateBotSettings,
+  getPrompts,
+  updatePrompts,
+  type BotSettings,
+  type Prompts,
+} from "@/lib/api";
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<BotSettings>({
@@ -39,23 +34,21 @@ export default function SettingsPage() {
 
   const fetchData = async () => {
     try {
-      const [resSettings, resPrompts] = await Promise.all([
-        fetch("/api/v1/settings/bot"),
-        fetch("/api/v1/settings/prompts"),
+      const [dataSettings, dataPrompts] = await Promise.all([
+        getBotSettings(),
+        getPrompts(),
       ]);
-      
-      if (resSettings.ok) {
-        const data = await resSettings.json();
+
+      if (dataSettings) {
         setSettings({
-          lawyer_telegram_id: data.lawyer_telegram_id || null,
-          admin_group_id: data.admin_group_id || null,
-          admin_telegram_ids: data.admin_telegram_ids || "",
+          lawyer_telegram_id: dataSettings.lawyer_telegram_id || null,
+          admin_group_id: dataSettings.admin_group_id || null,
+          admin_telegram_ids: dataSettings.admin_telegram_ids || "",
         });
       }
-      
-      if (resPrompts.ok) {
-        const data = await resPrompts.json();
-        setPrompts(data.prompts);
+
+      if (dataPrompts && dataPrompts.prompts) {
+        setPrompts(dataPrompts.prompts);
       }
     } catch (error) {
       console.error("Failed to fetch data:", error);
@@ -70,27 +63,17 @@ export default function SettingsPage() {
     setMessage(null);
 
     try {
-      const payload = {
+      const payload: BotSettings = {
         lawyer_telegram_id: settings.lawyer_telegram_id ? Number(settings.lawyer_telegram_id) : null,
         admin_group_id: settings.admin_group_id ? Number(settings.admin_group_id) : null,
         admin_telegram_ids: settings.admin_telegram_ids,
       };
 
-      const res = await fetch("/api/v1/settings/bot", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      if (res.ok) {
-        setMessage({ type: "success", text: "✅ Sozlamalar muvaffaqiyatli saqlandi!" });
-      } else {
-        const err = await res.json();
-        setMessage({ type: "error", text: `Xatolik: ${err.detail || "Noma'lum xato"}` });
-      }
-    } catch (error) {
+      await updateBotSettings(payload);
+      setMessage({ type: "success", text: "✅ Sozlamalar muvaffaqiyatli saqlandi!" });
+    } catch (error: any) {
       console.error("Save error:", error);
-      setMessage({ type: "error", text: "Tarmoq xatosi yuz berdi" });
+      setMessage({ type: "error", text: `Xatolik: ${error.message || "Tarmoq xatosi"}` });
     } finally {
       setSaving(false);
     }
@@ -102,21 +85,11 @@ export default function SettingsPage() {
     setPromptMessage(null);
 
     try {
-      const res = await fetch("/api/v1/settings/prompts", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompts }),
-      });
-
-      if (res.ok) {
-        setPromptMessage({ type: "success", text: "✅ Ko'rsatmalar (prompts) muvaffaqiyatli saqlandi!" });
-      } else {
-        const err = await res.json();
-        setPromptMessage({ type: "error", text: `Xatolik: ${err.detail || "Noma'lum xato"}` });
-      }
-    } catch (error) {
+      await updatePrompts(prompts);
+      setPromptMessage({ type: "success", text: "✅ Ko'rsatmalar (prompts) muvaffaqiyatli saqlandi!" });
+    } catch (error: any) {
       console.error("Save error:", error);
-      setPromptMessage({ type: "error", text: "Tarmoq xatosi yuz berdi" });
+      setPromptMessage({ type: "error", text: `Xatolik: ${error.message || "Tarmoq xatosi"}` });
     } finally {
       setSavingPrompts(false);
     }

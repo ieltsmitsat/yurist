@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot.handlers.public.inquiry import _simulate_typing
 from app.bot.keyboards.keyboards import cta_keyboard, phone_request_kb
 from app.db.models.user import User
+from app.services.chat_service import ChatService
 from app.services.inquiry_service import InquiryService
 from app.services.user_service import UserService
 
@@ -91,6 +92,17 @@ async def handle_document_upload(
             await bot.download_file(file_info.file_path, destination=buffer)
         file_bytes = buffer.getvalue()
 
+        # Log document upload
+        await ChatService.log_message(
+            session=session,
+            user_id=user.id,
+            telegram_id=user.telegram_id,
+            sender_type="user",
+            text=f"📑 Hujjat yuklandi: {filename}",
+            message_type="document",
+            telegram_message_id=message.message_id,
+        )
+
         # Simulate typing and run express audit
         await _simulate_typing(bot, message.chat.id, duration=3.0)
         _inquiry, analysis = await inquiry_service.process_express_audit(
@@ -108,7 +120,16 @@ async def handle_document_upload(
             else f"📑 <b>Результат аудита:</b> <i>{filename}</i>\n"
             f"Оценка риска: <b>{analysis.risk_score}/100</b>\n\n"
         )
-        await message.answer(header + analysis.response_text, reply_markup=reply_kb)
+        audit_reply = header + analysis.response_text
+        await message.answer(audit_reply, reply_markup=reply_kb)
+        await ChatService.log_message(
+            session=session,
+            user_id=user.id,
+            telegram_id=user.telegram_id,
+            sender_type="bot",
+            text=audit_reply,
+            message_type="text",
+        )
 
     except Exception as e:  # noqa: BLE001
         logger.error("Error processing document: %s", e)
@@ -119,6 +140,14 @@ async def handle_document_upload(
             else "Не удалось прочитать документ. Убедитесь в целостности файла."
         )
         await message.answer(err)
+        if user:
+            await ChatService.log_message(
+                session=session,
+                user_id=user.id,
+                telegram_id=user.telegram_id,
+                sender_type="bot",
+                text=err,
+            )
 
 
 @router.callback_query(F.data == "order_service:audit")

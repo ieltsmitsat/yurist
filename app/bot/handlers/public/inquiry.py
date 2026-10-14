@@ -94,11 +94,24 @@ async def _notify_admin_high_risk(
         await bot.send_message(chat_id=settings.ADMIN_GROUP_ID, text=alert_text)
     except Exception as e:  # noqa: BLE001
         logger.warning("Failed to send high-risk alert to admin group: %s", e)
+        # Handle automatic migration from normal group to supergroup
+        if "migrated to a supergroup with id" in str(e):
+            import re
+
+            m = re.search(r"id (-?\d+)", str(e))
+            if m:
+                new_chat_id = int(m.group(1))
+                try:
+                    await bot.send_message(chat_id=new_chat_id, text=alert_text)
+                    logger.info("Successfully sent alert to migrated supergroup: %d", new_chat_id)
+                except Exception as retry_err:  # noqa: BLE001
+                    logger.warning("Retry to supergroup %d failed: %s", new_chat_id, retry_err)
 
 
 async def _check_preconditions(
     message: Message,
     user: User | None,
+    session: AsyncSession | None = None,
     phone_key: str = "phone_required",
     balance_key: str = "balance_exhausted",
 ) -> bool:
@@ -106,15 +119,29 @@ async def _check_preconditions(
     lang = user.language if user else "uz"
 
     if (not user or not user.phone_number) and message.chat.type == "private":
-        await message.answer(
-            t(phone_key, lang), reply_markup=phone_request_kb(lang)
-        )
+        warn_msg = t(phone_key, lang)
+        await message.answer(warn_msg, reply_markup=phone_request_kb(lang))
+        if session and user:
+            await ChatService.log_message(
+                session=session,
+                user_id=user.id,
+                telegram_id=user.telegram_id,
+                sender_type="bot",
+                text=warn_msg,
+            )
         return False
 
     if user and not await UserService.has_questions_available(user):
-        await message.answer(
-            t(balance_key, lang), reply_markup=cta_keyboard("consultation", lang)
-        )
+        balance_msg = t(balance_key, lang)
+        await message.answer(balance_msg, reply_markup=cta_keyboard("consultation", lang))
+        if session:
+            await ChatService.log_message(
+                session=session,
+                user_id=user.id,
+                telegram_id=user.telegram_id,
+                sender_type="bot",
+                text=balance_msg,
+            )
         return False
 
     return True
@@ -168,12 +195,9 @@ async def handle_text_inquiry(
     if not message.from_user or not message.text or not user:
         return
 
-    if not await _check_preconditions(message, user):
-        return
-
     lang = user.language if user else "uz"
 
-    # Log incoming user message
+    # 1. Log incoming user message immediately so it's never lost in Inbox
     await ChatService.log_message(
         session=session,
         user_id=user.id,
@@ -182,6 +206,9 @@ async def handle_text_inquiry(
         text=message.text,
         telegram_message_id=message.message_id,
     )
+
+    if not await _check_preconditions(message, user, session=session):
+        return
 
     # Handle greetings gracefully without consuming free question balance
     clean_text = message.text.strip().lower()
@@ -255,6 +282,13 @@ async def handle_text_inquiry(
         logger.error("Error handling text inquiry: %s", e)
         err_msg = t("error_text_inquiry", lang)
         await message.answer(err_msg)
+        await ChatService.log_message(
+            session=session,
+            user_id=user.id,
+            telegram_id=user.telegram_id,
+            sender_type="bot",
+            text=err_msg,
+        )
 
 
 @router.message(F.voice)
@@ -270,6 +304,7 @@ async def handle_voice_inquiry(
 
     if not await _check_preconditions(
         message, user,
+        session=session,
         phone_key="phone_required_voice",
         balance_key="balance_exhausted_voice",
     ):
@@ -333,6 +368,13 @@ async def handle_voice_inquiry(
         logger.error("Error processing voice inquiry: %s", e)
         err_msg = t("error_voice_inquiry", lang)
         await message.answer(err_msg)
+        await ChatService.log_message(
+            session=session,
+            user_id=user.id,
+            telegram_id=user.telegram_id,
+            sender_type="bot",
+            text=err_msg,
+        )
     finally:
         if temp_path.exists():
             temp_path.unlink()

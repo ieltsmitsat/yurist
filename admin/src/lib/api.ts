@@ -210,3 +210,64 @@ export async function deleteHelpline(id: number): Promise<void> {
   const res = await fetch(`${API_BASE}/helplines/${id}`, { method: "DELETE" });
   if (!res.ok) throw new Error("Failed to delete helpline");
 }
+
+// Chats
+export interface Dialog {
+  user_id: number;
+  telegram_id: number;
+  full_name: string;
+  phone_number: string | null;
+  language: string;
+  lead_status: string;
+  last_message: string;
+  last_sender: string;
+  last_time: string | null;
+  total_messages: number;
+}
+
+export interface ChatMessageItem {
+  id: number;
+  user_id: number;
+  telegram_id: number;
+  sender_type: "user" | "bot" | "lawyer";
+  message_type: string;
+  text: string;
+  media_url?: string | null;
+  created_at: string;
+}
+
+export const getDialogs = () => fetchApi<Dialog[]>("/chats");
+export const getMessages = (userId: number) => fetchApi<ChatMessageItem[]>(`/chats/${userId}`);
+export const sendLawyerMessage = (userId: number, text: string) =>
+  fetchApi<ChatMessageItem>(`/chats/${userId}/send`, {
+    method: "POST",
+    body: JSON.stringify({ text }),
+  });
+
+// Settings
+export interface BotSettings {
+  lawyer_telegram_id: number | null;
+  admin_group_id: number | null;
+  admin_telegram_ids: string | null;
+}
+
+export interface Prompts {
+  PERSONA_SYSTEM_PROMPT_UZ: string;
+  PERSONA_SYSTEM_PROMPT_RU: string;
+  EXPRESS_AUDIT_PROMPT_UZ: string;
+  EXPRESS_AUDIT_PROMPT_RU: string;
+}
+
+export const getBotSettings = () => fetchApi<BotSettings>("/settings/bot");
+export const updateBotSettings = (data: BotSettings) =>
+  fetchApi<{ ok: boolean }>("/settings/bot", {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+export const getPrompts = () => fetchApi<{ prompts: Prompts }>("/settings/prompts");
+export const updatePrompts = (prompts: Prompts) =>
+  fetchApi<{ ok: boolean; prompts: Prompts }>("/settings/prompts", {
+    method: "PUT",
+    body: JSON.stringify({ prompts }),
+  });
+
