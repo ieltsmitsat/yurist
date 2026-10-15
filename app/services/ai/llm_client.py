@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -176,7 +177,7 @@ class LLMService:
             prompt=user_content,
             system_instruction=full_system,
             model=settings.GEMINI_MODEL,
-            temperature=0.3,
+            temperature=0.1,
         )
         return self._parse_structured_response(raw_text, language)
 
@@ -228,7 +229,7 @@ class LLMService:
             prompt=prompt,
             system_instruction=full_system,
             model=settings.GEMINI_MODEL,
-            temperature=0.5,
+            temperature=0.1,
         )
         return self._parse_structured_response(raw_text, language)
 
@@ -260,9 +261,12 @@ class LLMService:
             prompt=prompt,
             system_instruction=system_prompt,
             model=settings.GEMINI_FALLBACK_MODEL,
-            temperature=0.7,
+            temperature=0.2,
         )
-        return raw_text.strip()
+        result_text = raw_text.strip()
+        if language == "uz":
+            result_text = self._clean_and_normalize_uzbek(result_text)
+        return result_text
 
     def _parse_structured_response(self, raw_text: str, language: str) -> LegalAnalysisResult:
         """Extract response text and trailing JSON metadata block."""
@@ -317,6 +321,10 @@ class LLMService:
         ]
         response_body = "\n".join(lines).strip()
 
+        if language == "uz":
+            response_body = self._clean_and_normalize_uzbek(response_body)
+            upsell_offer = self._clean_and_normalize_uzbek(upsell_offer)
+
         if not is_legal_case or risk_level == "none":
             risk_level = "none"
             risk_score = 0
@@ -331,3 +339,53 @@ class LLMService:
             cta_type=cta_type,
             is_legal_case=is_legal_case,
         )
+
+    @staticmethod
+    def _clean_and_normalize_uzbek(text: str) -> str:
+        """Sanitize common LLM typos and normalize apostrophes in Uzbek text."""
+        # Normalize Unicode apostrophe variants to standard single quote '
+        text = re.sub(r"[\u2018\u2019\u02bc`´]", "'", text)
+
+        # Common LLM morphological typos and colloquialisms
+        typo_fixes = [
+            (r"\bnotariordan\b", "notariusdan"),
+            (r"\bnotariorga\b", "notariusga"),
+            (r"\bnotarior\b", "notarius"),
+            (r"\bmuizmangizning\b", "muammoingizning"),
+            (r"\bmuizmangizga\b", "muammoingizga"),
+            (r"\bmuizmangiz\b", "muammoingiz"),
+            (r"\bmuizma\b", "muammo"),
+            (r"\bmuizmalar\b", "muammolar"),
+            (r"\bqoldirishiz\b", "qoldirishingiz"),
+            (r"\byozishiz\b", "yozishingiz"),
+            (r"\bko'rishiz\b", "ko'rishingiz"),
+            (r"\bolishiz\b", "olishingiz"),
+            (r"\bberishiz\b", "berishingiz"),
+            (r"\bolishingiz haqingiz bor\b", "olishga haqingiz bor"),
+            (r"\bhizmat\b", "xizmat"),
+            (r"\bhizmatlar\b", "xizmatlar"),
+            (r"\bhizmati\b", "xizmati"),
+            (r"\bhizmatimiz\b", "xizmatimiz"),
+            (r"\bhizmatimizdan\b", "xizmatimizdan"),
+            (r"\bhizmatimizga\b", "xizmatimizga"),
+            (r"\bhizmatlarimiz\b", "xizmatlarimiz"),
+            (r"\bhizmatlarimizdan\b", "xizmatlarimizdan"),
+            (r"\bhizmatlarimizga\b", "xizmatlarimizga"),
+            (r"\bhato\b", "xato"),
+            (r"\bhatolar\b", "xatolar"),
+            (r"\bhatolarni\b", "xatolarni"),
+            (r"\bhatolarga\b", "xatolarga"),
+        ]
+
+        for pattern, replacement in typo_fixes:
+            def repl(m: re.Match[str], rep: str = replacement) -> str:
+                matched = m.group(0)
+                if matched.isupper():
+                    return rep.upper()
+                if matched[0].isupper():
+                    return rep.capitalize()
+                return rep
+
+            text = re.sub(pattern, repl, text, flags=re.IGNORECASE)
+
+        return text
