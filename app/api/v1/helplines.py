@@ -1,7 +1,7 @@
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,10 +28,8 @@ class HelplineUpdate(HelplineBase):
     pass
 
 class HelplineResponse(HelplineBase):
+    model_config = ConfigDict(from_attributes=True)
     id: int
-    
-    class Config:
-        from_attributes = True
 
 @router.get("", response_model=list[HelplineResponse])
 async def get_helplines(db: AsyncSession = Depends(get_db_session)) -> Any:  # noqa: B008

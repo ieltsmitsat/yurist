@@ -6,22 +6,49 @@ import {
   updateBotSettings,
   getPrompts,
   updatePrompts,
+  getSystemAccessList,
+  createSystemAccess,
+  updateSystemAccess,
+  deleteSystemAccess,
   type BotSettings,
   type Prompts,
+  type SystemAccessItem,
 } from "@/lib/api";
 
+type RoleFilter = "all" | "lawyer" | "group" | "admin";
+
 export default function SettingsPage() {
+  // Access Management State
+  const [accessList, setAccessList] = useState<SystemAccessItem[]>([]);
+  const [activeTab, setActiveTab] = useState<RoleFilter>("all");
+  const [showAccessModal, setShowAccessModal] = useState(false);
+  const [editingAccess, setEditingAccess] = useState<SystemAccessItem | null>(null);
+  const [accessSaving, setAccessSaving] = useState(false);
+  const [accessError, setAccessError] = useState<string | null>(null);
+
+  const [accessForm, setAccessForm] = useState({
+    telegram_id: "",
+    role: "lawyer" as "lawyer" | "group" | "admin",
+    name: "",
+    description: "",
+    is_active: true,
+  });
+
+  // Global Bot Settings State
   const [settings, setSettings] = useState<BotSettings>({
     lawyer_telegram_id: null,
     admin_group_id: null,
     admin_telegram_ids: "",
   });
+
+  // Prompts State
   const [prompts, setPrompts] = useState<Prompts>({
     PERSONA_SYSTEM_PROMPT_UZ: "",
     PERSONA_SYSTEM_PROMPT_RU: "",
     EXPRESS_AUDIT_PROMPT_UZ: "",
     EXPRESS_AUDIT_PROMPT_RU: "",
   });
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingPrompts, setSavingPrompts] = useState(false);
@@ -34,26 +61,128 @@ export default function SettingsPage() {
 
   const fetchData = async () => {
     try {
-      const [dataSettings, dataPrompts] = await Promise.all([
+      const [settingsRes, promptsRes, accessRes] = await Promise.allSettled([
         getBotSettings(),
         getPrompts(),
+        getSystemAccessList(),
       ]);
 
-      if (dataSettings) {
+      if (settingsRes.status === "fulfilled" && settingsRes.value) {
         setSettings({
-          lawyer_telegram_id: dataSettings.lawyer_telegram_id || null,
-          admin_group_id: dataSettings.admin_group_id || null,
-          admin_telegram_ids: dataSettings.admin_telegram_ids || "",
+          lawyer_telegram_id: settingsRes.value.lawyer_telegram_id || null,
+          admin_group_id: settingsRes.value.admin_group_id || null,
+          admin_telegram_ids: settingsRes.value.admin_telegram_ids || "",
         });
       }
 
-      if (dataPrompts && dataPrompts.prompts) {
-        setPrompts(dataPrompts.prompts);
+      if (promptsRes.status === "fulfilled" && promptsRes.value?.prompts) {
+        setPrompts(promptsRes.value.prompts);
+      }
+
+      if (accessRes.status === "fulfilled" && accessRes.value) {
+        setAccessList(accessRes.value);
+      } else if (accessRes.status === "rejected") {
+        console.warn("Could not fetch access list from API:", accessRes.reason);
       }
     } catch (error) {
-      console.error("Failed to fetch data:", error);
+      console.error("Failed to fetch settings data:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleOpenAddModal = (defaultRole?: "lawyer" | "group" | "admin") => {
+    setEditingAccess(null);
+    setAccessError(null);
+    setAccessForm({
+      telegram_id: "",
+      role: defaultRole || (activeTab !== "all" ? activeTab : "lawyer"),
+      name: "",
+      description: "",
+      is_active: true,
+    });
+    setShowAccessModal(true);
+  };
+
+  const handleOpenEditModal = (item: SystemAccessItem) => {
+    setEditingAccess(item);
+    setAccessError(null);
+    setAccessForm({
+      telegram_id: item.telegram_id.toString(),
+      role: item.role,
+      name: item.name,
+      description: item.description || "",
+      is_active: item.is_active,
+    });
+    setShowAccessModal(true);
+  };
+
+  const handleSaveAccess = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAccessSaving(true);
+    setAccessError(null);
+
+    const tgId = Number(accessForm.telegram_id.trim());
+    if (isNaN(tgId) || tgId === 0) {
+      setAccessError("To'g'ri Telegram ID raqamini kiriting!");
+      setAccessSaving(false);
+      return;
+    }
+
+    if (!accessForm.name.trim()) {
+      setAccessError("Iltimos, ism yoki nomini kiriting!");
+      setAccessSaving(false);
+      return;
+    }
+
+    try {
+      if (editingAccess) {
+        const updated = await updateSystemAccess(editingAccess.id, {
+          telegram_id: tgId,
+          role: accessForm.role,
+          name: accessForm.name.trim(),
+          description: accessForm.description.trim() || null,
+          is_active: accessForm.is_active,
+        });
+        setAccessList((prev) => prev.map((item) => (item.id === editingAccess.id ? updated : item)));
+      } else {
+        const created = await createSystemAccess({
+          telegram_id: tgId,
+          role: accessForm.role,
+          name: accessForm.name.trim(),
+          description: accessForm.description.trim() || null,
+          is_active: accessForm.is_active,
+        });
+        setAccessList((prev) => [...prev, created]);
+      }
+      setShowAccessModal(false);
+    } catch (err: any) {
+      console.error("Save access error:", err);
+      setAccessError(err.message || "Saqlashda xatolik yuz berdi");
+    } finally {
+      setAccessSaving(false);
+    }
+  };
+
+  const handleDeleteAccess = async (id: number, name: string) => {
+    if (!confirm(`Haqiqatan ham "${name}" ni ro'yxatdan o'chirmoqchimisiz?`)) {
+      return;
+    }
+
+    try {
+      await deleteSystemAccess(id);
+      setAccessList((prev) => prev.filter((item) => item.id !== id));
+    } catch (err: any) {
+      alert(`O'chirishda xatolik: ${err.message || "Noma'lum xato"}`);
+    }
+  };
+
+  const handleToggleAccessStatus = async (item: SystemAccessItem) => {
+    try {
+      const updated = await updateSystemAccess(item.id, { is_active: !item.is_active });
+      setAccessList((prev) => prev.map((i) => (i.id === item.id ? updated : i)));
+    } catch (err: any) {
+      alert(`Holatni o'zgartirishda xatolik: ${err.message}`);
     }
   };
 
@@ -95,22 +224,289 @@ export default function SettingsPage() {
     }
   };
 
+  // Filtered access list
+  const filteredAccessList = accessList.filter((item) => {
+    if (activeTab === "all") return true;
+    return item.role === activeTab;
+  });
+
+  const countLawyers = accessList.filter((i) => i.role === "lawyer").length;
+  const countGroups = accessList.filter((i) => i.role === "group").length;
+  const countAdmins = accessList.filter((i) => i.role === "admin").length;
+
+  const getRoleBadge = (role: string) => {
+    switch (role) {
+      case "lawyer":
+        return (
+          <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+            <span>👨‍⚖️</span> Advokat
+          </span>
+        );
+      case "group":
+        return (
+          <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-semibold bg-blue-50 text-blue-800 border border-blue-200">
+            <span>👥</span> Guruh
+          </span>
+        );
+      case "admin":
+        return (
+          <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-semibold bg-purple-50 text-purple-800 border border-purple-200">
+            <span>🔑</span> Admin
+          </span>
+        );
+      default:
+        return (
+          <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
+            {role}
+          </span>
+        );
+    }
+  };
+
   if (loading) {
     return (
-      <div className="p-8 text-center text-slate-400">
-        <div className="animate-spin h-6 w-6 border-3 border-indigo-500 border-t-transparent rounded-full mx-auto mb-2" />
-        Yuklanmoqda...
+      <div className="p-16 text-center text-slate-400">
+        <div className="animate-spin h-7 w-7 border-3 border-indigo-500 border-t-transparent rounded-full mx-auto mb-3" />
+        Sozlamalar yuklanmoqda...
       </div>
     );
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-10 pb-20">
-      {/* 1. System Settings */}
-      <div className="space-y-6">
+    <div className="max-w-5xl mx-auto space-y-12 pb-24">
+      {/* 1. Header */}
+      <div>
+        <h1 className="text-2xl font-bold text-slate-900">⚙️ Tizim Sozlamalari va Ruxsatlar</h1>
+        <p className="text-sm text-slate-500 mt-1">
+          Advokatlar, bildirishnoma guruhlari, adminlar va AI bot xatti-harakatini to'liq boshqaring.
+        </p>
+      </div>
+
+      {/* 2. Unified Access Management Section */}
+      <div className="space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+              <span>👥</span> Ruxsatlar va Rollar Boshqaruvi
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Advokatlar, bildirishnoma guruhlari va admin panel ruxsatlari ro'yxati
+            </p>
+          </div>
+
+          <button
+            onClick={() => handleOpenAddModal()}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 shadow-sm transition-all active:scale-95"
+          >
+            <span>➕</span> Yangi Qo'shish
+          </button>
+        </div>
+
+        {/* Filter Tabs */}
+        <div className="flex items-center gap-2 border-b border-slate-200 pb-2 overflow-x-auto">
+          <button
+            onClick={() => setActiveTab("all")}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
+              activeTab === "all"
+                ? "bg-indigo-50 text-indigo-700 border border-indigo-200 shadow-sm"
+                : "text-slate-600 hover:bg-slate-100"
+            }`}
+          >
+            🌐 Barchasi ({accessList.length})
+          </button>
+
+          <button
+            onClick={() => setActiveTab("lawyer")}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
+              activeTab === "lawyer"
+                ? "bg-amber-50 text-amber-800 border border-amber-200 shadow-sm"
+                : "text-slate-600 hover:bg-slate-100"
+            }`}
+          >
+            👨‍⚖️ Advokatlar ({countLawyers})
+          </button>
+
+          <button
+            onClick={() => setActiveTab("group")}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
+              activeTab === "group"
+                ? "bg-blue-50 text-blue-700 border border-blue-200 shadow-sm"
+                : "text-slate-600 hover:bg-slate-100"
+            }`}
+          >
+            👥 Guruhlar ({countGroups})
+          </button>
+
+          <button
+            onClick={() => setActiveTab("admin")}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
+              activeTab === "admin"
+                ? "bg-purple-50 text-purple-700 border border-purple-200 shadow-sm"
+                : "text-slate-600 hover:bg-slate-100"
+            }`}
+          >
+            🔑 Adminlar ({countAdmins})
+          </button>
+        </div>
+
+        {/* Table / Cards View */}
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+          {/* Desktop Table View */}
+          <div className="hidden md:block overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  <th className="text-left px-4 py-3.5 font-semibold text-slate-600 text-xs uppercase tracking-wider">
+                    ID
+                  </th>
+                  <th className="text-left px-4 py-3.5 font-semibold text-slate-600 text-xs uppercase tracking-wider">
+                    Rol
+                  </th>
+                  <th className="text-left px-4 py-3.5 font-semibold text-slate-600 text-xs uppercase tracking-wider">
+                    Nomi / Ism
+                  </th>
+                  <th className="text-left px-4 py-3.5 font-semibold text-slate-600 text-xs uppercase tracking-wider">
+                    Telegram ID
+                  </th>
+                  <th className="text-left px-4 py-3.5 font-semibold text-slate-600 text-xs uppercase tracking-wider">
+                    Tavsifi
+                  </th>
+                  <th className="text-left px-4 py-3.5 font-semibold text-slate-600 text-xs uppercase tracking-wider">
+                    Holat
+                  </th>
+                  <th className="text-right px-4 py-3.5 font-semibold text-slate-600 text-xs uppercase tracking-wider">
+                    Amallar
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredAccessList.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="text-center py-12 text-slate-400">
+                      Hech qanday ma'lumot topilmadi. Yuqoridagi "+ Yangi Qo'shish" tugmasi orqali kiriting.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredAccessList.map((item) => (
+                    <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-4 py-3.5 font-mono text-slate-400 text-xs">#{item.id}</td>
+                      <td className="px-4 py-3.5">{getRoleBadge(item.role)}</td>
+                      <td className="px-4 py-3.5 font-semibold text-slate-900">{item.name}</td>
+                      <td className="px-4 py-3.5 font-mono text-xs text-slate-700 bg-slate-50/70 rounded-md">
+                        {item.telegram_id}
+                      </td>
+                      <td className="px-4 py-3.5 text-xs text-slate-500 max-w-xs truncate">
+                        {item.description || "—"}
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <button
+                          onClick={() => handleToggleAccessStatus(item)}
+                          title="Holatni o'zgartirish"
+                          className="cursor-pointer transition-transform hover:scale-105"
+                        >
+                          {item.is_active ? (
+                            <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                              Faol
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full font-semibold bg-slate-100 text-slate-500 border border-slate-200">
+                              Nofaol
+                            </span>
+                          )}
+                        </button>
+                      </td>
+                      <td className="px-4 py-3.5 text-right space-x-2">
+                        <button
+                          onClick={() => handleOpenEditModal(item)}
+                          className="px-2.5 py-1 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors"
+                        >
+                          ✏️ Tahrirlash
+                        </button>
+                        <button
+                          onClick={() => handleDeleteAccess(item.id, item.name)}
+                          className="px-2.5 py-1 text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
+                        >
+                          🗑️ O'chirish
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile Cards View */}
+          <div className="md:hidden divide-y divide-slate-100">
+            {filteredAccessList.length === 0 ? (
+              <div className="p-8 text-center text-slate-400 text-sm">
+                Hech qanday ma'lumot topilmadi.
+              </div>
+            ) : (
+              filteredAccessList.map((item) => (
+                <div key={item.id} className="p-4 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs text-slate-400">#{item.id}</span>
+                      {getRoleBadge(item.role)}
+                    </div>
+                    <button
+                      onClick={() => handleToggleAccessStatus(item)}
+                      className="cursor-pointer text-xs"
+                    >
+                      {item.is_active ? (
+                        <span className="text-[11px] px-2 py-0.5 rounded-full font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          Faol
+                        </span>
+                      ) : (
+                        <span className="text-[11px] px-2 py-0.5 rounded-full font-semibold bg-slate-100 text-slate-500">
+                          Nofaol
+                        </span>
+                      )}
+                    </button>
+                  </div>
+
+                  <div>
+                    <h3 className="font-semibold text-slate-900 text-sm">{item.name}</h3>
+                    <p className="text-xs font-mono text-slate-500 mt-0.5">ID: {item.telegram_id}</p>
+                    {item.description && (
+                      <p className="text-xs text-slate-500 mt-1 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                        {item.description}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-1">
+                    <button
+                      onClick={() => handleOpenEditModal(item)}
+                      className="px-3 py-1.5 text-xs font-semibold text-indigo-600 bg-indigo-50 rounded-lg"
+                    >
+                      ✏️ Tahrirlash
+                    </button>
+                    <button
+                      onClick={() => handleDeleteAccess(item.id, item.name)}
+                      className="px-3 py-1.5 text-xs font-semibold text-red-600 bg-red-50 rounded-lg"
+                    >
+                      🗑️ O'chirish
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Global / Fallback Bot Settings */}
+      <div className="space-y-6 pt-6 border-t border-slate-200">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">⚙️ Bot Sozlamalari</h1>
-          <p className="text-sm text-slate-500 mt-1">Telegram bot konfiguratsiyasi va ruxsatlar</p>
+          <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+            <span>⚙️</span> Asosiy / Birlamchi Bot Konfiguratsiyasi
+          </h2>
+          <p className="text-sm text-slate-500 mt-0.5">
+            Tizimning asosiy standart konfiguratsiyasi va .env sozlamalari
+          </p>
         </div>
 
         {message && (
@@ -131,55 +527,61 @@ export default function SettingsPage() {
               {/* Lawyer ID */}
               <div className="p-6">
                 <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                  👨‍⚖️ Advokat Telegram ID
+                  👨‍⚖️ Birlamchi Advokat Telegram ID
                 </label>
                 <input
                   type="number"
                   value={settings.lawyer_telegram_id || ""}
                   onChange={(e) =>
-                    setSettings({ ...settings, lawyer_telegram_id: e.target.value ? Number(e.target.value) : null })
+                    setSettings({
+                      ...settings,
+                      lawyer_telegram_id: e.target.value ? Number(e.target.value) : null,
+                    })
                   }
                   placeholder="Masalan: 6236820733"
                   className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder:text-slate-400"
                 />
                 <p className="mt-1.5 text-xs text-slate-400">
-                  Botda advokat huquqlariga ega (cheksiz savollar va javob berish imkoniyati).
+                  Asosiy advokat hisobi. (Qo'shimcha barcha advokatlarni yuqoridagi jadvaldan kiritishingiz mumkin).
                 </p>
               </div>
 
               {/* Admin Group */}
               <div className="p-6">
                 <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                  👥 Admin Guruh ID
+                  👥 Birlamchi Admin Guruh ID
                 </label>
                 <input
                   type="number"
                   value={settings.admin_group_id || ""}
                   onChange={(e) =>
-                    setSettings({ ...settings, admin_group_id: e.target.value ? Number(e.target.value) : null })
+                    setSettings({
+                      ...settings,
+                      admin_group_id: e.target.value ? Number(e.target.value) : null,
+                    })
                   }
                   placeholder="Masalan: -1001234567890"
                   className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder:text-slate-400"
                 />
                 <p className="mt-1.5 text-xs text-slate-400">
-                  Bot muhim xabar va leadlarni shu guruhga yuboradi.
+                  Bot muhim xabarlar, to'lovlar va SOS lidlarini yuboradigan asosiy Telegram guruhi.
                 </p>
               </div>
 
               {/* Admin IDs */}
               <div className="p-6">
                 <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                  🔑 Admin Panelga Ruxsatli ID lar
+                  🔑 Birlamchi Admin Telegram ID lari
                 </label>
                 <input
                   type="text"
                   value={settings.admin_telegram_ids || ""}
                   onChange={(e) => setSettings({ ...settings, admin_telegram_ids: e.target.value })}
-                  placeholder="Vergul bilan: 111111,222222,333333"
+                  placeholder="Masalan: 111111,222222,333333"
                   className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder:text-slate-400"
                 />
                 <p className="mt-1.5 text-xs text-slate-400">
-                  Admin panelga kirish huquqiga ega Telegram ID lar ro'yxati.
+                  Admin panelga kirish huquqiga ega asosiy Telegram ID lari ro'yxati.
                 </p>
               </div>
             </div>
@@ -190,18 +592,22 @@ export default function SettingsPage() {
                 disabled={saving}
                 className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
-                {saving ? "Saqlanmoqda..." : "Saqlash"}
+                {saving ? "Saqlanmoqda..." : "Asosiy Sozlamalarni Saqlash"}
               </button>
             </div>
           </form>
         </div>
       </div>
 
-      {/* 2. AI Prompts Settings */}
-      <div className="space-y-6 pt-8 border-t border-slate-200">
+      {/* 4. AI Prompts Settings */}
+      <div className="space-y-6 pt-6 border-t border-slate-200">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">🧠 AI Bot Ko'rsatmalari (Prompts)</h2>
-          <p className="text-sm text-slate-500 mt-1">Sun'iy intellektning harakteri va qoidalarini shu yerdan o'zgartiring.</p>
+          <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+            <span>🧠</span> AI Advokat Ko'rsatmalari (Prompts)
+          </h2>
+          <p className="text-sm text-slate-500 mt-1">
+            Sun'iy intellektning harakteri, huquqiy tahlili va savdo takliflarini sozlang.
+          </p>
         </div>
 
         {promptMessage && (
@@ -219,11 +625,10 @@ export default function SettingsPage() {
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
           <form onSubmit={handleSavePrompts}>
             <div className="divide-y divide-slate-100">
-              
               {/* O'zbekcha Persona Prompt */}
               <div className="p-6">
-                <label className="block text-sm font-semibold text-slate-700 mb-2 flex items-center justify-between">
-                  <span>🇺🇿 O'zbekcha Bosh Ko'rsatma (Persona)</span>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  🇺🇿 O'zbekcha Advokat Personasi (Bosh Ko'rsatma)
                 </label>
                 <textarea
                   rows={8}
@@ -236,8 +641,8 @@ export default function SettingsPage() {
 
               {/* Ruscha Persona Prompt */}
               <div className="p-6">
-                <label className="block text-sm font-semibold text-slate-700 mb-2 flex items-center justify-between">
-                  <span>🇷🇺 Ruscha Bosh Ko'rsatma (Persona)</span>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  🇷🇺 Ruscha Advokat Personasi (Bosh Ko'rsatma)
                 </label>
                 <textarea
                   rows={8}
@@ -250,8 +655,8 @@ export default function SettingsPage() {
 
               {/* O'zbekcha Audit Prompt */}
               <div className="p-6">
-                <label className="block text-sm font-semibold text-slate-700 mb-2 flex items-center justify-between">
-                  <span>📄 Hujjat Audit Ko'rsatmasi (O'zbekcha)</span>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  📄 Hujjatlarni Audit Qilish Ko'rsatmasi (O'zbekcha)
                 </label>
                 <textarea
                   rows={6}
@@ -264,8 +669,8 @@ export default function SettingsPage() {
 
               {/* Ruscha Audit Prompt */}
               <div className="p-6">
-                <label className="block text-sm font-semibold text-slate-700 mb-2 flex items-center justify-between">
-                  <span>📄 Hujjat Audit Ko'rsatmasi (Ruscha)</span>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  📄 Hujjatlarni Audit Qilish Ko'rsatmasi (Ruscha)
                 </label>
                 <textarea
                   rows={6}
@@ -275,7 +680,6 @@ export default function SettingsPage() {
                   placeholder="Hujjatlarni rus tilida audit qilish qoidalari..."
                 />
               </div>
-
             </div>
 
             <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex justify-end">
@@ -290,6 +694,132 @@ export default function SettingsPage() {
           </form>
         </div>
       </div>
+
+      {/* 5. Add / Edit Access Modal */}
+      {showAccessModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <h3 className="font-bold text-lg text-slate-900">
+                {editingAccess ? "✏️ Ruxsatni Tahrirlash" : "➕ Yangi Ruxsat / Rol Qo'shish"}
+              </h3>
+              <button
+                onClick={() => setShowAccessModal(false)}
+                className="text-slate-400 hover:text-slate-600 text-xl font-bold px-2 py-1 rounded-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            {accessError && (
+              <div className="mt-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-medium">
+                {accessError}
+              </div>
+            )}
+
+            <form onSubmit={handleSaveAccess} className="space-y-4 mt-4">
+              {/* Role Select */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  Ruxsat Turi (Rol)
+                </label>
+                <select
+                  value={accessForm.role}
+                  onChange={(e) =>
+                    setAccessForm({
+                      ...accessForm,
+                      role: e.target.value as "lawyer" | "group" | "admin",
+                    })
+                  }
+                  className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                >
+                  <option value="lawyer">👨‍⚖️ Advokat (Lawyer — cheksiz savollar va mijozga javob)</option>
+                  <option value="group">👥 Bildirishnoma Guruhi (Yangi lidlar va to'lovlar guruhi)</option>
+                  <option value="admin">🔑 Admin Panel Ruxsati (Boshqaruv paneli administratori)</option>
+                </select>
+              </div>
+
+              {/* Name */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  Ism yoki Guruh Nomi
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={accessForm.name}
+                  onChange={(e) => setAccessForm({ ...accessForm, name: e.target.value })}
+                  placeholder="Masalan: Advokat Alisher Qodirov yoki Toshkent Filiali Guruhi"
+                  className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder:text-slate-400"
+                />
+              </div>
+
+              {/* Telegram ID */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  Telegram ID (Foydalanuvchi yoki Guruh ID si)
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={accessForm.telegram_id}
+                  onChange={(e) => setAccessForm({ ...accessForm, telegram_id: e.target.value })}
+                  placeholder="Shaxs uchun: 6236820733 | Guruh uchun: -1001234567890"
+                  className="w-full px-3.5 py-2.5 font-mono border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder:text-slate-400"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Eslatma: Telegram guruh ID lari odatda <code>-100...</code> bilan boshlanadi.
+                </p>
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  Tavsifi / Izoh
+                </label>
+                <textarea
+                  rows={2}
+                  value={accessForm.description}
+                  onChange={(e) => setAccessForm({ ...accessForm, description: e.target.value })}
+                  placeholder="Masalan: Fuqarolik ishlari bo'yicha mas'ul advokat yoki Asosiy arizalar tushadigan guruh"
+                  className="w-full px-3.5 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder:text-slate-400"
+                />
+              </div>
+
+              {/* Active Toggle */}
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="access_active"
+                  checked={accessForm.is_active}
+                  onChange={(e) => setAccessForm({ ...accessForm, is_active: e.target.checked })}
+                  className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500"
+                />
+                <label htmlFor="access_active" className="text-xs font-semibold text-slate-700 cursor-pointer">
+                  Ushbu ruxsat darhol faol (ishlaydigan) bo'lsin
+                </label>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowAccessModal(false)}
+                  className="px-4 py-2 border border-slate-300 rounded-xl text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+                >
+                  Bekor qilish
+                </button>
+                <button
+                  type="submit"
+                  disabled={accessSaving}
+                  className="px-5 py-2 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                >
+                  {accessSaving ? "Saqlanmoqda..." : editingAccess ? "O'zgartirish" : "Qo'shish"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

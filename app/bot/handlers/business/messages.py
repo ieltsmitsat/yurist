@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.redis import BusinessPauseManager
+from app.services.access_service import AccessService
 from app.services.ai.llm_client import LLMService
 from app.services.chat_service import ChatService
 from app.services.user_service import UserService
@@ -51,15 +52,9 @@ async def handle_business_message(
 
     # 2. Extract text or transcribe voice
     # Support multiple lawyers/admins for manual takeover
-    admin_ids: set[int] = set()
-    if settings.LAWYER_TELEGRAM_ID:
-        admin_ids.add(settings.LAWYER_TELEGRAM_ID)
-    if settings.ADMIN_TELEGRAM_IDS:
-        for raw_id in settings.ADMIN_TELEGRAM_IDS.split(","):
-            raw_id = raw_id.strip()
-            if raw_id.isdigit():
-                admin_ids.add(int(raw_id))
-    is_lawyer = sender_id in admin_ids
+    lawyer_ids = await AccessService.get_active_lawyer_ids(session)
+    admin_ids = await AccessService.get_active_admin_ids(session)
+    is_lawyer = sender_id in (lawyer_ids | admin_ids)
     question_text = ""
     is_voice = False
 

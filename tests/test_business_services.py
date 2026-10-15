@@ -12,6 +12,7 @@ from app.db.models.attachment import Attachment
 from app.db.models.inquiry import Inquiry
 from app.db.models.service import Service
 from app.db.models.sos import SOSRequest
+from app.db.models.system_access import SystemAccess
 from app.db.models.transaction import Transaction
 from app.db.models.user import User
 from app.services.payment_service import PaymentService
@@ -39,6 +40,7 @@ async def setup_db():
             Attachment.__table__,
             Transaction.__table__,
             SOSRequest.__table__,
+            SystemAccess.__table__,
         ]
         await conn.run_sync(Base.metadata.create_all, tables=tables)
     yield
@@ -246,3 +248,59 @@ async def test_lawyer_unlimited_questions():
             assert lawyer_user.free_questions_left == 0
         finally:
             settings.LAWYER_TELEGRAM_ID = orig_lawyer_id
+
+
+@pytest.mark.asyncio
+async def test_access_service_methods():
+    """Test AccessService multi-lawyer, groups, and admin retrieval and CRUD."""
+    from app.services.access_service import AccessService
+
+    async with TestingSessionLocal() as session:
+        # Create multiple lawyers
+        lawyer1 = await AccessService.create(
+            session=session,
+            telegram_id=10001,
+            role="lawyer",
+            name="Advokat 1",
+            description="Toshkent shahri",
+            is_active=True,
+        )
+        assert lawyer1.id is not None
+
+        lawyer2 = await AccessService.create(
+            session=session,
+            telegram_id=10002,
+            role="lawyer",
+            name="Advokat 2",
+            description="Samarqand viloyati",
+            is_active=False,  # Inactive
+        )
+        group1 = await AccessService.create(
+            session=session,
+            telegram_id=-100999,
+            role="group",
+            name="Buyurtmalar guruhi",
+            is_active=True,
+        )
+        assert group1.id is not None
+
+        # Check active lawyers (only lawyer1 should be in active IDs)
+        active_lawyer_ids = await AccessService.get_active_lawyer_ids(session)
+        assert 10001 in active_lawyer_ids
+        assert 10002 not in active_lawyer_ids  # inactive
+
+        # Check is_lawyer helper
+        assert await AccessService.is_lawyer(session, 10001) is True
+        assert await AccessService.is_lawyer(session, 10002) is False
+        assert await AccessService.is_lawyer(session, 99999) is False
+
+        # Check groups
+        group_ids = await AccessService.get_active_group_ids(session)
+        assert -100999 in group_ids
+
+        # Update lawyer2 to active
+        await AccessService.update(session, lawyer2.id, is_active=True)
+        active_lawyer_ids = await AccessService.get_active_lawyer_ids(session)
+        assert 10002 in active_lawyer_ids
+        assert await AccessService.is_lawyer(session, 10002) is True
+

@@ -9,6 +9,7 @@ from app.db.models.inquiry import Inquiry
 from app.db.models.legal_chunk import LegalChunk
 from app.db.models.service import Service
 from app.db.models.sos import SOSRequest
+from app.db.models.system_access import SystemAccess
 from app.db.models.transaction import Transaction
 from app.db.models.user import User
 
@@ -22,6 +23,7 @@ __all__ = [
     "LegalChunk",
     "SOSRequest",
     "Service",
+    "SystemAccess",
     "Transaction",
     "User",
 ]

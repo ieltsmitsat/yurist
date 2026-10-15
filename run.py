@@ -16,6 +16,7 @@ from app.core.config import settings
 from app.db.base import Base
 from app.db.models.legal_chunk import LegalChunk
 from app.db.session import AsyncSessionLocal, engine
+from app.services.access_service import AccessService
 from app.services.ai.rag import RAGService
 from app.services.chat_service import ChatService
 from app.services.payment_service import PaymentService
@@ -65,6 +66,9 @@ async def init_database() -> None:
 
         # Seed services if empty
         await PaymentService.seed_default_services(session)
+
+        # Seed system access (lawyers, groups, admins) if empty
+        await AccessService.seed_default_access(session)
 
         # Backfill chat messages from inquiries if empty
         await ChatService.backfill_historical_inquiries(session)

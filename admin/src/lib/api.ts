@@ -271,3 +271,43 @@ export const updatePrompts = (prompts: Prompts) =>
     body: JSON.stringify({ prompts }),
   });
 
+// System Access Management (Lawyers, Groups, Admins)
+export interface SystemAccessItem {
+  id: number;
+  telegram_id: number;
+  role: "lawyer" | "group" | "admin";
+  name: string;
+  description: string | null;
+  is_active: boolean;
+  created_at?: string;
+}
+
+export const getSystemAccessList = (role?: string) =>
+  fetchApi<SystemAccessItem[]>(`/settings/access${role ? `?role=${role}` : ""}`);
+
+export const createSystemAccess = (data: {
+  telegram_id: number;
+  role: "lawyer" | "group" | "admin";
+  name: string;
+  description?: string | null;
+  is_active?: boolean;
+}) =>
+  fetchApi<SystemAccessItem>("/settings/access", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+
+export const updateSystemAccess = (
+  id: number,
+  data: Partial<Omit<SystemAccessItem, "id" | "created_at">>
+) =>
+  fetchApi<SystemAccessItem>(`/settings/access/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+
+export const deleteSystemAccess = (id: number) =>
+  fetchApi<{ ok: boolean }>(`/settings/access/${id}`, {
+    method: "DELETE",
+  });
+

@@ -15,6 +15,7 @@ from app.db.models.chat_message import ChatMessage
 from app.db.models.inquiry import Inquiry
 from app.db.models.service import Service
 from app.db.models.sos import SOSRequest
+from app.db.models.system_access import SystemAccess
 from app.db.models.transaction import Transaction
 from app.db.models.user import User
 from app.db.session import get_db_session
@@ -52,6 +53,7 @@ async def setup_test_db():
             Transaction.__table__,
             SOSRequest.__table__,
             ChatMessage.__table__,
+            SystemAccess.__table__,
         ]
         await conn.run_sync(Base.metadata.create_all, tables=tables)
     yield
@@ -376,3 +378,74 @@ async def test_chat_endpoints():
             assert send_res.json()["text"] == "Bu advokatdan javob!"
             assert send_res.json()["sender_type"] == "lawyer"
             mock_send.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_system_access_crud_api():
+    """Test CRUD operations for System Access (lawyers, groups, admins)."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # 1. Create a lawyer
+        res = await client.post(
+            "/api/v1/settings/access",
+            json={
+                "telegram_id": 555666777,
+                "role": "lawyer",
+                "name": "Advokat Jamshid",
+                "description": "Bosh yurist konsultant",
+                "is_active": True,
+            },
+        )
+        assert res.status_code == 201
+        lawyer_data = res.json()
+        assert lawyer_data["telegram_id"] == 555666777
+        assert lawyer_data["role"] == "lawyer"
+        assert lawyer_data["name"] == "Advokat Jamshid"
+        lawyer_id = lawyer_data["id"]
+
+        # 2. Create a group
+        res_group = await client.post(
+            "/api/v1/settings/access",
+            json={
+                "telegram_id": -1001987654321,
+                "role": "group",
+                "name": "Lidlar guruhi",
+                "description": "Yangi arizalar guruhi",
+                "is_active": True,
+            },
+        )
+        assert res_group.status_code == 201
+        assert res_group.json()["role"] == "group"
+
+        # 3. List all access entries
+        res_list = await client.get("/api/v1/settings/access")
+        assert res_list.status_code == 200
+        items = res_list.json()
+        assert len(items) >= 2
+
+        # 4. Filter by role
+        res_lawyers = await client.get("/api/v1/settings/access?role=lawyer")
+        assert res_lawyers.status_code == 200
+        lawyers_only = res_lawyers.json()
+        assert all(item["role"] == "lawyer" for item in lawyers_only)
+
+        # 5. Update lawyer
+        res_update = await client.put(
+            f"/api/v1/settings/access/{lawyer_id}",
+            json={
+                "name": "Advokat Jamshid (Bosh)",
+                "description": "Yangilangan tavsif",
+            },
+        )
+        assert res_update.status_code == 200
+        assert res_update.json()["name"] == "Advokat Jamshid (Bosh)"
+        assert res_update.json()["description"] == "Yangilangan tavsif"
+
+        # 6. Delete lawyer
+        res_del = await client.delete(f"/api/v1/settings/access/{lawyer_id}")
+        assert res_del.status_code == 200
+        assert res_del.json()["ok"] is True
+
+        # Verify deleted
+        res_get_del = await client.get("/api/v1/settings/access?role=lawyer")
+        assert not any(i["id"] == lawyer_id for i in res_get_del.json())

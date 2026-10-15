@@ -1,8 +1,10 @@
 import type { NextConfig } from "next";
 
-const backendUrl = process.env.NEXT_PUBLIC_API_URL
-  ? process.env.NEXT_PUBLIC_API_URL.replace(/\/api\/v1\/?$/, "")
-  : "http://127.0.0.1:8000";
+const rawBackend = process.env.BACKEND_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+const backendUrl =
+  rawBackend && rawBackend.startsWith("http")
+    ? rawBackend.replace(/\/api\/v1\/?$/, "")
+    : "http://127.0.0.1:8000";
 
 const nextConfig: NextConfig = {
   allowedDevOrigins: ['192.168.0.163'],

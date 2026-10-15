@@ -32,6 +32,7 @@ admin/build/
 .gemini/
 .agent/
 .agents/
+.claude/
 .obsidian/
 .codex/
 skills-lock.json

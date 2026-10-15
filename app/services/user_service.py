@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.db.models.user import User
+from app.services.access_service import AccessService
 
 logger = logging.getLogger(__name__)
 
@@ -60,9 +61,7 @@ class UserService:
             res = await session.execute(stmt)
             referred_by_id = res.scalar_one_or_none()
 
-        is_lawyer_account = bool(
-            settings.LAWYER_TELEGRAM_ID and telegram_id == settings.LAWYER_TELEGRAM_ID
-        )
+        is_lawyer_account = await AccessService.is_lawyer(session, telegram_id)
         referral_code = f"ref_{telegram_id}"
 
         user = User(
@@ -142,8 +141,11 @@ class UserService:
 
     @classmethod
     def is_lawyer(cls, user: User) -> bool:
-        """Check if user is the designated lawyer / administrator."""
-        return bool(settings.LAWYER_TELEGRAM_ID and user.telegram_id == settings.LAWYER_TELEGRAM_ID)
+        """Check if user is a designated lawyer / administrator."""
+        return bool(
+            user.lead_status == "lawyer"
+            or (settings.LAWYER_TELEGRAM_ID and user.telegram_id == settings.LAWYER_TELEGRAM_ID)
+        )
 
     @classmethod
     async def has_questions_available(cls, user: User) -> bool:
