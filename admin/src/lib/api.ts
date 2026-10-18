@@ -11,7 +11,14 @@ export async function fetchApi<T>(
     ...options,
   });
   if (!res.ok) {
-    throw new Error(`API Error ${res.status}: ${res.statusText}`);
+    let errorDetail = "";
+    try {
+      const errJson = await res.json();
+      errorDetail = errJson.detail || errJson.message || JSON.stringify(errJson);
+    } catch {
+      errorDetail = res.statusText;
+    }
+    throw new Error(errorDetail || `API Error ${res.status}`);
   }
   return res.json();
 }
