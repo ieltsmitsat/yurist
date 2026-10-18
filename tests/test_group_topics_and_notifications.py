@@ -191,3 +191,41 @@ async def test_system_access_create_and_update_with_topics():
         assert (-1009999991, 103) not in new_payment_dests
 
     await engine.dispose()
+
+
+def test_is_general_or_private_filter():
+    """Verify that is_general_or_private allows private & General, and blocks other topics."""
+    from app.bot.handlers.public.inquiry import is_general_or_private
+
+    # 1. Private chat -> Allowed
+    msg_private = MagicMock()
+    msg_private.chat.type = "private"
+    assert is_general_or_private(msg_private) is True
+
+    # 2. Supergroup in General (is_topic_message False, thread_id None) -> Allowed
+    msg_general = MagicMock()
+    msg_general.chat.type = "supergroup"
+    msg_general.is_topic_message = False
+    msg_general.message_thread_id = None
+    assert is_general_or_private(msg_general) is True
+
+    # 3. Supergroup in General with thread_id 1 -> Allowed
+    msg_general_1 = MagicMock()
+    msg_general_1.chat.type = "supergroup"
+    msg_general_1.is_topic_message = False
+    msg_general_1.message_thread_id = 1
+    assert is_general_or_private(msg_general_1) is True
+
+    # 4. Supergroup in non-General topic (e.g. Leadlar or To'lovlar, thread 45) -> BLOCKED
+    msg_topic = MagicMock()
+    msg_topic.chat.type = "supergroup"
+    msg_topic.is_topic_message = True
+    msg_topic.message_thread_id = 45
+    assert is_general_or_private(msg_topic) is False
+
+    # 5. Supergroup with thread_id > 1 even if is_topic_message flag missing -> BLOCKED
+    msg_topic_id = MagicMock()
+    msg_topic_id.chat.type = "supergroup"
+    msg_topic_id.is_topic_message = False
+    msg_topic_id.message_thread_id = 12
+    assert is_general_or_private(msg_topic_id) is False

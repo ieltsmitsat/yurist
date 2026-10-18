@@ -29,6 +29,26 @@ router = Router(name="inquiry_router")
 inquiry_service = InquiryService()
 
 
+def is_general_or_private(message: Message) -> bool:
+    """Ensure bot only responds in private chats or the General topic of supergroups."""
+    if not message.chat:
+        return False
+
+    if message.chat.type == "private":
+        return True
+
+    # Telegram API sets is_topic_message = True for all forum topics other than General
+    if getattr(message, "is_topic_message", False):
+        return False
+
+    # message_thread_id is None for General (or 1 in some client configurations)
+    thread_id = getattr(message, "message_thread_id", None)
+    return thread_id is None or thread_id == 1
+
+
+router.message.filter(is_general_or_private)
+
+
 async def _simulate_typing(bot: Bot, chat_id: int, duration: float = 1.5) -> None:
     """Simulate realistic human typing indicator in Telegram."""
     try:
