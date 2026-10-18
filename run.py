@@ -20,6 +20,7 @@ from app.services.access_service import AccessService
 from app.services.ai.rag import RAGService
 from app.services.chat_service import ChatService
 from app.services.payment_service import PaymentService
+from app.services.user_service import UserService
 from scripts.seed_legal_db import SEED_LEGAL_ARTICLES
 
 logging.basicConfig(
@@ -69,6 +70,11 @@ async def init_database() -> None:
 
         # Seed system access (lawyers, groups, admins) if empty
         await AccessService.seed_default_access(session)
+
+        # Synchronize lawyer permissions for all registered active lawyers
+        active_lawyer_ids = await AccessService.get_active_lawyer_ids(session)
+        for lawyer_tg_id in active_lawyer_ids:
+            await UserService.sync_lawyer_status(session, lawyer_tg_id, is_active_lawyer=True)
 
         # Backfill chat messages from inquiries if empty
         await ChatService.backfill_historical_inquiries(session)

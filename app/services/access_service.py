@@ -121,6 +121,13 @@ class AccessService:
         session.add(access)
         await session.commit()
         await session.refresh(access)
+
+        # Synchronize lawyer status for existing user record
+        if role == "lawyer" and is_active:
+            from app.services.user_service import UserService
+
+            await UserService.sync_lawyer_status(session, telegram_id, is_active_lawyer=True)
+
         logger.info(
             "Created system access record: ID=%d, TelegramID=%d, Role=%s, Name=%s",
             access.id,
@@ -148,12 +155,28 @@ class AccessService:
             if existing and existing.id != access_id:
                 raise ValueError(f"Telegram ID {fields['telegram_id']} boshqa yozuvda mavjud!")
 
+        old_role = access.role
+        old_tg_id = access.telegram_id
+
         for key, value in fields.items():
             if hasattr(access, key) and value is not None:
                 setattr(access, key, value)
 
         await session.commit()
         await session.refresh(access)
+
+        # Synchronize lawyer status if lawyer role or status was affected
+        from app.services.user_service import UserService
+
+        if access.role == "lawyer":
+            await UserService.sync_lawyer_status(
+                session, access.telegram_id, is_active_lawyer=access.is_active
+            )
+        elif old_role == "lawyer":
+            still_lawyer = await cls.is_lawyer(session, old_tg_id)
+            if not still_lawyer:
+                await UserService.sync_lawyer_status(session, old_tg_id, is_active_lawyer=False)
+
         logger.info("Updated system access record: ID=%d", access.id)
         return access
 
@@ -164,8 +187,19 @@ class AccessService:
         if not access:
             return False
 
+        tg_id = access.telegram_id
+        was_lawyer = access.role == "lawyer"
+
         await session.delete(access)
         await session.commit()
+
+        if was_lawyer:
+            from app.services.user_service import UserService
+
+            still_lawyer = await cls.is_lawyer(session, tg_id)
+            if not still_lawyer:
+                await UserService.sync_lawyer_status(session, tg_id, is_active_lawyer=False)
+
         logger.info("Deleted system access record: ID=%d", access_id)
         return True
 

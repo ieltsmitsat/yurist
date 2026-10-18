@@ -304,3 +304,45 @@ async def test_access_service_methods():
         assert 10002 in active_lawyer_ids
         assert await AccessService.is_lawyer(session, 10002) is True
 
+
+@pytest.mark.asyncio
+async def test_lawyer_table_unlimited_questions_for_existing_user():
+    """Test that existing regular users promoted to lawyers in settings table get unlimited messages."""
+    from app.services.access_service import AccessService
+
+    async with TestingSessionLocal() as session:
+        # 1. Existing regular user with 0 free questions and no subscription
+        user, _ = await UserService.get_or_create_user(
+            session=session,
+            telegram_id=555444,
+            full_name="Mijoz Sardor",
+        )
+        user.free_questions_left = 0
+        user.is_subscribed = False
+        await session.commit()
+
+        # Regular user should NOT have questions available
+        assert await UserService.has_questions_available(user, session=session) is False
+
+        # 2. Add user to Lawyers access table
+        await AccessService.create(
+            session=session,
+            telegram_id=555444,
+            role="lawyer",
+            name="Advokat Sardor",
+            is_active=True,
+        )
+
+        # 3. User should now automatically be promoted and have unlimited questions
+        await session.refresh(user)
+        assert user.lead_status == "lawyer"
+        assert user.is_subscribed is True
+        assert user.free_questions_left >= 999999
+        assert UserService.is_lawyer(user) is True
+        assert await UserService.has_questions_available(user, session=session) is True
+
+        # Decrementing should NOT decrease question balance
+        bal = await UserService.decrement_question(session, user)
+        assert bal >= 999999
+        assert user.free_questions_left >= 999999
+

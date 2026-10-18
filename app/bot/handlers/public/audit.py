@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot.handlers.public.inquiry import _simulate_typing
 from app.bot.keyboards.keyboards import cta_keyboard, phone_request_kb
 from app.db.models.user import User
+from app.services.access_service import AccessService
 from app.services.chat_service import ChatService
 from app.services.inquiry_service import InquiryService
 from app.services.user_service import UserService
@@ -44,12 +45,19 @@ async def handle_document_upload(
     bot: Bot,
     user: User | None = None,
 ) -> None:
-    """Handle document upload for express audit."""
-    if not message.from_user or not message.document:
+    if not message.from_user or not message.document or not user:
         return
 
-    # Hard gate check
-    if not user or not user.phone_number:
+    # Check if user is a designated lawyer (unrestricted access)
+    is_lawyer = False
+    if UserService.is_lawyer(user):
+        is_lawyer = True
+    elif await AccessService.is_lawyer(session, user.telegram_id):
+        await UserService.sync_lawyer_status(session, user.telegram_id, is_active_lawyer=True)
+        is_lawyer = True
+
+    # Hard gate check for regular clients
+    if not is_lawyer and (not user or not user.phone_number):
         prompt = (
             "Hujjatni tahlil qilish uchun avval telefon raqamingizni yuboring:"
             if (user.language if user else "uz") == "uz"
@@ -58,7 +66,7 @@ async def handle_document_upload(
         await message.answer(prompt, reply_markup=phone_request_kb(user.language if user else "uz"))
         return
 
-    lang = user.language
+    lang = user.language if user else "uz"
     filename = message.document.file_name or "document.pdf"
     ext = filename.lower().rsplit(".", 1)[-1]
 
@@ -71,8 +79,8 @@ async def handle_document_upload(
         await message.answer(err)
         return
 
-    # Check question balance
-    if not await UserService.has_questions_available(user):
+    # Check question balance for regular clients
+    if not is_lawyer and not await UserService.has_questions_available(user, session=session):
         limit_msg = (
             "Hurmatli mijoz, bepul savollar balansingiz yakunlandi.\n"
             "Advokat bilan shaxsiy konsultatsiya olishingiz yoki do'stlarni taklif qilib (+1 savol) olishingiz mumkin."

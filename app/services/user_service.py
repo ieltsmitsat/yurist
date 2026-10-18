@@ -34,6 +34,19 @@ class UserService:
         """Get existing user or create a new lead."""
         user = await cls.get_by_telegram_id(session, telegram_id)
         if user:
+            # Dynamically synchronize lawyer status if user is added/activated as lawyer
+            is_lawyer_account = await AccessService.is_lawyer(session, telegram_id)
+            if is_lawyer_account and (
+                user.lead_status != "lawyer"
+                or not user.is_subscribed
+                or user.free_questions_left < 999999
+            ):
+                user.lead_status = "lawyer"
+                user.is_subscribed = True
+                user.free_questions_left = 999999
+                await session.commit()
+                await session.refresh(user)
+
             # Attribute referral if user has no referrer and valid code supplied
             if (
                 referred_by_code
@@ -144,26 +157,61 @@ class UserService:
         """Check if user is a designated lawyer / administrator."""
         return bool(
             user.lead_status == "lawyer"
+            or (user.is_subscribed and user.free_questions_left >= 999999)
             or (settings.LAWYER_TELEGRAM_ID and user.telegram_id == settings.LAWYER_TELEGRAM_ID)
         )
 
     @classmethod
-    async def has_questions_available(cls, user: User) -> bool:
+    async def has_questions_available(
+        cls, user: User, session: AsyncSession | None = None
+    ) -> bool:
         """Check if user has remaining free inquiries or an active subscription."""
         if cls.is_lawyer(user) or user.is_subscribed:
+            return True
+        if session and await AccessService.is_lawyer(session, user.telegram_id):
+            await cls.sync_lawyer_status(session, user.telegram_id, is_active_lawyer=True)
             return True
         return user.free_questions_left > 0
 
     @classmethod
     async def decrement_question(cls, session: AsyncSession, user: User) -> int:
         """Deduct one question from balance if not subscribed and not lawyer."""
-        if cls.is_lawyer(user) or user.is_subscribed:
+        if (
+            cls.is_lawyer(user)
+            or user.is_subscribed
+            or await AccessService.is_lawyer(session, user.telegram_id)
+        ):
             return user.free_questions_left
         if user.free_questions_left > 0:
             user.free_questions_left -= 1
             await session.commit()
             await session.refresh(user)
         return user.free_questions_left
+
+    @classmethod
+    async def sync_lawyer_status(
+        cls, session: AsyncSession, telegram_id: int, is_active_lawyer: bool
+    ) -> User | None:
+        """Synchronize lawyer status and unlimited questions across User records."""
+        user = await cls.get_by_telegram_id(session, telegram_id)
+        if not user:
+            return None
+
+        if is_active_lawyer:
+            user.lead_status = "lawyer"
+            user.is_subscribed = True
+            user.free_questions_left = 999999
+            logger.info("Promoted user %d (TG %d) to lawyer with unlimited questions", user.id, user.telegram_id)
+        elif user.lead_status == "lawyer":
+            user.lead_status = "verified_lead" if user.phone_number else "new"
+            user.is_subscribed = False
+            if user.free_questions_left >= 999999:
+                user.free_questions_left = settings.FREE_QUESTIONS_LIMIT
+            logger.info("Demoted user %d (TG %d) from lawyer status", user.id, user.telegram_id)
+
+        await session.commit()
+        await session.refresh(user)
+        return user
 
     @classmethod
     async def add_questions(cls, session: AsyncSession, user_id: int, count: int) -> User | None:

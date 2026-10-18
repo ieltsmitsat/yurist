@@ -15,6 +15,7 @@ from app.bot.i18n import t
 from app.bot.keyboards.keyboards import cta_keyboard, phone_request_kb
 from app.core.config import settings
 from app.db.models.user import User
+from app.services.access_service import AccessService
 from app.services.chat_service import ChatService
 from app.services.inquiry_service import InquiryService
 from app.services.user_service import UserService
@@ -118,6 +119,14 @@ async def _check_preconditions(
     """Check phone verification and question balance. Returns True if user can proceed."""
     lang = user.language if user else "uz"
 
+    # Lawyers have unrestricted unlimited messaging access without phone or balance gates
+    if user:
+        if UserService.is_lawyer(user):
+            return True
+        if session and await AccessService.is_lawyer(session, user.telegram_id):
+            await UserService.sync_lawyer_status(session, user.telegram_id, is_active_lawyer=True)
+            return True
+
     if (not user or not user.phone_number) and message.chat.type == "private":
         warn_msg = t(phone_key, lang)
         await message.answer(warn_msg, reply_markup=phone_request_kb(lang))
@@ -131,7 +140,7 @@ async def _check_preconditions(
             )
         return False
 
-    if user and not await UserService.has_questions_available(user):
+    if user and not await UserService.has_questions_available(user, session=session):
         balance_msg = t(balance_key, lang)
         await message.answer(balance_msg, reply_markup=cta_keyboard("consultation", lang))
         if session:
@@ -150,6 +159,7 @@ async def _check_preconditions(
 @router.message(F.text.in_(["💬 Yuridik savol berish", "💬 Задать правовой вопрос"]))
 async def handle_inquiry_button_click(
     message: Message,
+    session: AsyncSession,
     user: User | None = None,
 ) -> None:
     """Handle click on 'Ask Legal Question' button from main menu."""
@@ -157,7 +167,7 @@ async def handle_inquiry_button_click(
         return
 
     if not await _check_preconditions(
-        message, user, phone_key="phone_required_button"
+        message, user, session=session, phone_key="phone_required_button"
     ):
         return
 
