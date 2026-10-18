@@ -87,7 +87,7 @@ async def handle_business_message(
                 if temp_path.exists():
                     temp_path.unlink()
         else:
-            question_text = "[Advokatning ovozli xabari]"
+            question_text = "[Huquqshunosning ovozli xabari]"
 
     # If neither text nor voice, just ignore
     if not question_text and not message.voice:

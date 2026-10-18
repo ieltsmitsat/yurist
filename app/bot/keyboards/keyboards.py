@@ -95,7 +95,7 @@ def cta_keyboard(cta_type: str, lang: str = "uz") -> InlineKeyboardMarkup | None
         )
         buttons.append([InlineKeyboardButton(text=btn_text, callback_data="order_service:audit")])
     elif cta_type == "court":
-        btn_text = "⚖️ Sudda advokat vakilligi" if lang == "uz" else "⚖️ Представительство в суде"
+        btn_text = "⚖️ Sudda huquqshunos vakilligi" if lang == "uz" else "⚖️ Представительство в суде"
         buttons.append([InlineKeyboardButton(text=btn_text, callback_data="order_service:court")])
     else:
         btn_text = (
@@ -134,7 +134,7 @@ def sos_options_kb(lang: str = "uz") -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
-                    text="📞 Advokatni chaqirish (Tezkor)", callback_data="sos_call_lawyer"
+                    text="📞 Huquqshunosni chaqirish (Tezkor)", callback_data="sos_call_lawyer"
                 )
             ],
         ]
@@ -152,7 +152,7 @@ def sos_options_kb(lang: str = "uz") -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
-                    text="📞 Вызов адвоката (Срочно)", callback_data="sos_call_lawyer"
+                    text="📞 Вызов юриста (Срочно)", callback_data="sos_call_lawyer"
                 )
             ],
         ]
@@ -173,9 +173,9 @@ def services_catalog_kb(services: Sequence[Service], lang: str = "uz") -> Inline
             ]
         )
     contact_text = (
-        "👤 Advokat bilan to'g'ridan-to'g'ri bog'lanish"
+        "👤 Huquqshunos bilan to'g'ridan-to'g'ri bog'lanish"
         if lang == "uz"
-        else "👤 Прямой контакт с адвокатом"
+        else "👤 Прямой контакт с юристом"
     )
     buttons.append([InlineKeyboardButton(text=contact_text, callback_data="contact_lawyer")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -197,7 +197,7 @@ def payment_methods_kb(service_id: int, lang: str = "uz") -> InlineKeyboardMarku
             ],
             [
                 InlineKeyboardButton(
-                    text="👤 Advokat bilan bog'lanish va buyurtma berish",
+                    text="👤 Huquqshunos bilan bog'lanish va buyurtma berish",
                     callback_data="contact_lawyer",
                 )
             ],
@@ -221,7 +221,7 @@ def payment_methods_kb(service_id: int, lang: str = "uz") -> InlineKeyboardMarku
             ],
             [
                 InlineKeyboardButton(
-                    text="👤 Связаться с адвокатом для заказа",
+                    text="👤 Связаться с юристом для заказа",
                     callback_data="contact_lawyer",
                 )
             ],
@@ -245,9 +245,9 @@ def settings_kb(lang: str = "uz") -> InlineKeyboardMarkup:
 def referral_share_kb(ref_link: str, lang: str = "uz") -> InlineKeyboardMarkup:
     """Inline keyboard for viral referral sharing (1-click Telegram share) and live stats refresh."""
     share_text = (
-        "Assalomu alaykum! Malakali advokat va AI yurist yordamchisi. Savolingizni bepul bering:"
+        "Assalomu alaykum! Malakali huquqshunos va AI yurist yordamchisi. Savolingizni bepul bering:"
         if lang == "uz"
-        else "Здравствуйте! Квалифицированный адвокат и AI-помощник. Задайте свой правовой вопрос бесплатно:"
+        else "Здравствуйте! Квалифицированный юрист и AI-помощник. Задайте свой правовой вопрос бесплатно:"
     )
     share_url = f"https://t.me/share/url?url={quote(ref_link)}&text={quote(share_text)}"
     share_btn_text = "📤 Do'stlarga ulashish" if lang == "uz" else "📤 Поделиться с друзьями"

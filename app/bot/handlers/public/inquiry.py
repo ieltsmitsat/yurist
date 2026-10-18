@@ -112,7 +112,7 @@ async def _notify_admin_high_risk(
         f"📱 <b>Telefon:</b> {user.phone_number or 'Ko\'rsatilmagan'}\n"
         f"🔴 <b>Xavf bali:</b> {risk_score}/100\n"
         f"💬 <b>Savol:</b> {question[:300]}...\n\n"
-        "👉 Advokat aralashuvi va zudlik bilan qo'ng'iroq qilish tavsiya etiladi."
+        "👉 Huquqshunos aralashuvi va zudlik bilan qo'ng'iroq qilish tavsiya etiladi."
     )
     try:
         await bot.send_message(chat_id=settings.ADMIN_GROUP_ID, text=alert_text)

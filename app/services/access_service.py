@@ -249,8 +249,8 @@ class AccessService:
                 SystemAccess(
                     telegram_id=settings.LAWYER_TELEGRAM_ID,
                     role="lawyer",
-                    name="Bosh Advokat",
-                    description="Asosiy advokatlik hisobi (shaxsiy biznes-ulanish va to'liq huquqlar)",
+                    name="Bosh Huquqshunos",
+                    description="Asosiy yuridik hisob (shaxsiy biznes-ulanish va to'liq huquqlar)",
                     is_active=True,
                 )
             )

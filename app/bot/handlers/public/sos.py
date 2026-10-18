@@ -22,11 +22,11 @@ async def handle_sos_menu(message: Message, user: User | None = None) -> None:
         "🆘 <b>Shoshilinch Yuridik Yordam (SOS Hotline)</b>\n\n"
         "Siz yoki yaqinlaringiz IIB xodimlari tomonidan to'xtatilganda, "
         "tintuv yoki favqulodda huquqiy nizo yuzaga kelganda quyidagi qonuniy yo'riqnomadan foydalaning "
-        "yoki zudlik bilan navbatchi advokatni chaqiring."
+        "yoki zudlik bilan navbatchi huquqshunosni chaqiring."
         if lang == "uz"
         else "🆘 <b>Экстренная юридическая помощь (SOS Hotline)</b>\n\n"
         "При остановке сотрудниками правоохранительных органов, "
-        "обыске или задержании выберите соответствующую инструкцию или срочно вызовите адвоката."
+        "обыске или задержании выберите соответствующую инструкцию или срочно вызовите юриста."
     )
     await message.answer(text, reply_markup=sos_options_kb(lang))
 
@@ -42,17 +42,17 @@ async def handle_police_guide(callback: CallbackQuery, user: User | None = None)
         "1. <b>O'zini tanishtirishni talab qiling:</b>\n"
         "Xodim lavozimi, unvoni, familiyasi va xizmat guvohnomasini ko'rsatishi shart ('Ichki ishlar to'g'risida'gi qonun, 9-modda).\n\n"
         "2. <b>Sukut saqlash huquqi:</b>\n"
-        "Konstitutsiyaning 28-moddasiga binoan, o'zingizga va yaqinlaringizga qarshi ko'rsatma bermaslikka haqlisiz. Advokatingiz kelmaguncha hech qanday hujjatga imzo chekmang!\n\n"
+        "Konstitutsiyaning 28-moddasiga binoan, o'zingizga va yaqinlaringizga qarshi ko'rsatma bermaslikka haqlisiz. Huquqshunosingiz kelmaguncha hech qanday hujjatga imzo chekmang!\n\n"
         "3. <b>Telefon qo'ng'irog'i huquqi:</b>\n"
-        "Ushlanganingizdan so'ng darhol yaqinlaringizga yoki advokatingizga qo'ng'iroq qilib, qayerda ekanligingizni xabar qilish huquqingiz bor."
+        "Ushlanganingizdan so'ng darhol yaqinlaringizga yoki huquqshunosingizga qo'ng'iroq qilib, qayerda ekanligingizni xabar qilish huquqingiz bor."
         if lang == "uz"
         else "🚨 <b>3 правила при остановке полицией:</b>\n\n"
         "1. <b>Требуйте представиться:</b>\n"
         "Сотрудник обязан назвать должность, звание, фамилию и предъявить служебное удостоверение (Закон «Об ОВД», ст. 9).\n\n"
         "2. <b>Право на молчание:</b>\n"
-        "Согласно ст. 28 Конституции РУз, никто не обязан свидетельствовать против себя и близких. Не подписывайте протоколы без адвоката!\n\n"
+        "Согласно ст. 28 Конституции РУз, никто не обязан свидетельствовать против себя и близких. Не подписывайте протоколы без юриста!\n\n"
         "3. <b>Право на один звонок:</b>\n"
-        "Вы имеете право немедленно уведомить адвоката или близких о месте вашего нахождения."
+        "Вы имеете право немедленно уведомить юриста или близких о месте вашего нахождения."
     )
     await callback.answer()
     await callback.message.answer(guide)
@@ -70,16 +70,16 @@ async def handle_raid_guide(callback: CallbackQuery, user: User | None = None) -
         "Tergovchi yoki prokurorning asoslantirilgan tintuv qarori (yoki sud ajrimi) taqdim etilishi shart (JPK 157-modda).\n\n"
         "2. <b>Xolislar (Ponitiye) ishtiroki:</b>\n"
         "Tintuv kamida 2 nafar xolis guvoh ishtirokida o'tkazilishi shart. Xolislarning xolisligiga e'tibor bering.\n\n"
-        "3. <b>Advokat ishtirokini talab qiling:</b>\n"
-        "Siz advokatingiz kelguniga qadar tintuvni boshlamaslikni talab qilishga va bayonnomaga o'z e'tirozingizni yozishga haqlisiz."
+        "3. <b>Huquqshunos ishtirokini talab qiling:</b>\n"
+        "Siz huquqshunosingiz kelguniga qadar tintuvni boshlamaslikni talab qilishga va bayonnomaga o'z e'tirozingizni yozishga haqlisiz."
         if lang == "uz"
         else "🏢 <b>Правила при обыске или проверке бизнеса:</b>\n\n"
         "1. <b>Требуйте постановление:</b>\n"
         "Следователь обязан предъявить мотивированное постановление об обыске (ст. 157 УПК РУз).\n\n"
         "2. <b>Участие понятых:</b>\n"
         "Обыск проводится с обязательным участием не менее двух понятых.\n\n"
-        "3. <b>Участие адвоката:</b>\n"
-        "Вы вправе требовать присутствия вашего адвоката и вносить возражения в протокол."
+        "3. <b>Участие юриста:</b>\n"
+        "Вы вправе требовать присутствия вашего юриста и вносить возражения в протокол."
     )
     await callback.answer()
     await callback.message.answer(guide)
@@ -92,14 +92,14 @@ async def handle_sos_call(callback: CallbackQuery, user: User | None = None) -> 
         return
     lang = user.language if user else "uz"
     hotline = (
-        "🚨 <b>Favqulodda Advokat Chaqiruvi:</b>\n\n"
-        "Zudlik bilan navbatchi advokat bilan bog'laning:\n"
+        "🚨 <b>Favqulodda Huquqshunos Chaqiruvi:</b>\n\n"
+        "Zudlik bilan navbatchi huquqshunos bilan bog'laning:\n"
         "📞 <b>+998 (90) 000-00-00</b> (24/7 Shoshilinch liniya)\n\n"
         "<i>Qo'ng'iroq paytida shaxsingizni, hozirgi joylashuvingizni (geolokatsiyani) "
         "va sizni kim ushlab turganini qisqa va aniq ayting.</i>"
         if lang == "uz"
-        else "🚨 <b>Срочный вызов адвоката:</b>\n\n"
-        "Горячая линия дежурного адвоката:\n"
+        else "🚨 <b>Срочный вызов юриста:</b>\n\n"
+        "Горячая линия дежурного юриста:\n"
         "📞 <b>+998 (90) 000-00-00</b> (Круглосуточно)\n\n"
         "<i>Назовите ваше имя, текущее местоположение и орган, проводящий задержание.</i>"
     )

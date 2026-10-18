@@ -29,11 +29,11 @@ async def handle_audit_menu_click(message: Message, user: User | None = None) ->
     prompt = (
         "📑 <b>Hujjat auditi</b>\n\n"
         "Shartnoma yoki huquqiy hujjatni (PDF yoki Word) yuboring. "
-        "Advokat xavf balli va 2 ta asosiy zaiflikni ko'rsatib beradi."
+        "Huquqshunos xavf balli va 2 ta asosiy zaiflikni ko'rsatib beradi."
         if lang == "uz"
         else "📑 <b>Аудит документа</b>\n\n"
         "Отправьте договор или документ (PDF или DOCX). "
-        "Адвокат определит балл риска и 2 ключевые уязвимости."
+        "Юрист определит балл риска и 2 ключевые уязвимости."
     )
     await message.answer(prompt)
 
@@ -83,7 +83,7 @@ async def handle_document_upload(
     if not is_lawyer and not await UserService.has_questions_available(user, session=session):
         limit_msg = (
             "Hurmatli mijoz, bepul savollar balansingiz yakunlandi.\n"
-            "Advokat bilan shaxsiy konsultatsiya olishingiz yoki do'stlarni taklif qilib (+1 savol) olishingiz mumkin."
+            "Huquqshunos bilan shaxsiy konsultatsiya olishingiz yoki do'stlarni taklif qilib (+1 savol) olishingiz mumkin."
             if lang == "uz"
             else "Лимит бесплатных консультаций исчерпан. Запишитесь на консультацию или пригласите друзей (+1 вопрос)."
         )
@@ -166,10 +166,10 @@ async def handle_order_audit(callback: CallbackQuery, user: User | None = None) 
     lang = user.language if user else "uz"
     text = (
         "💼 <b>To'liq Shartnoma Auditi xizmati</b>\n\n"
-        "Advokat hujjatning barcha bandlarini amaldagi qonunchilikka muvofiq tekshiradi, "
+        "Huquqshunos hujjatning barcha bandlarini amaldagi qonunchilikka muvofiq tekshiradi, "
         "barcha yashirin risklarni olib tashlaydi va sizning manfaatlaringizni to'liq himoya qiluvchi tahrirni tayyorlaydi.\n\n"
         "Xizmat narxi: <b>150 000 so'm</b>\n\n"
-        "Buyurtma berish uchun quyidagi to'lov usulini tanlang yoki advokat bilan bog'laning."
+        "Buyurtma berish uchun quyidagi to'lov usulini tanlang yoki huquqshunos bilan bog'laning."
         if lang == "uz"
         else "💼 <b>Полный аудит договора</b>\n\n"
         "Юрист проверит все пункты на соответствие законодательству РУз, "

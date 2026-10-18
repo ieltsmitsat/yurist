@@ -86,7 +86,7 @@ async def _complete_registration(
             f"🎁 Sizga dastlabki <b>{updated_user.free_questions_left} ta bepul yuridik tahlil</b> taqdim etildi.\n\n"
             "💬 <b>Endi savolingizni yo'llashingiz mumkin!</b>\n"
             "Marhamat, o'zingizni qiynayotgan huquqiy masalani matn ko'rinishida yozing yoki ovozli xabar (voice memo) yuboring.\n\n"
-            "<i>Advokat sizning savolingizni tahlil qilib, professional huquqiy xulosa taqdim etadi.</i>"
+            "<i>Huquqshunos sizning savolingizni tahlil qilib, professional huquqiy xulosa taqdim etadi.</i>"
         )
     else:
         welcome_text = (
@@ -94,7 +94,7 @@ async def _complete_registration(
             f"🎁 Вам начислено <b>{updated_user.free_questions_left} бесплатных юридических консультации</b>.\n\n"
             "💬 <b>Теперь вы можете отправить ваш вопрос!</b>\n"
             "Опишите вашу ситуацию текстом или отправьте голосовое сообщение.\n\n"
-            "<i>Адвокат изучит ваш вопрос и предоставит квалифицированное заключение.</i>"
+            "<i>Юрист изучит ваш вопрос и предоставит квалифицированное заключение.</i>"
         )
 
     await message.answer(welcome_text, reply_markup=main_menu_kb(lang))
@@ -162,12 +162,12 @@ async def handle_text_phone_submission(
 
     # If message is not a valid phone number, kindly guide them
     prompt = (
-        "Savolingizga javob berish va advokat bilan aloqa o'rnatish uchun, "
+        "Savolingizga javob berish va huquqshunos bilan aloqa o'rnatish uchun, "
         "iltimos, telefon raqamingizni pastdagi <b>«📱 Telefon raqamni yuborish»</b> "
         "tugmasi orqali yuboring yoki quyidagi formatda yozing:\n\n"
         "👉 <code>+998 90 123 45 67</code>"
         if lang == "uz"
-        else "Для консультации и оперативной связи с адвокатом, "
+        else "Для консультации и оперативной связи с юристом, "
         "пожалуйста, отправьте номер через кнопку <b>«📱 Отправить номер телефона»</b> "
         "или напишите в формате:\n\n"
         "👉 <code>+998 90 123 45 67</code>"

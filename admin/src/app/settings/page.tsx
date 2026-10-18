@@ -268,7 +268,7 @@ export default function SettingsPage() {
       case "lawyer":
         return (
           <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-semibold bg-amber-50 text-amber-800 border border-amber-200">
-            <span>👨‍⚖️</span> Advokat
+            <span>👨‍⚖️</span> Huquqshunos
           </span>
         );
       case "group":
@@ -359,7 +359,7 @@ export default function SettingsPage() {
               <span>👥</span> Ruxsatlar va Rollar Boshqaruvi
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              Advokatlar, bildirishnoma guruhlari va admin panel ruxsatlari ro'yxati
+              Huquqshunoslar, bildirishnoma guruhlari va admin panel ruxsatlari ro'yxati
             </p>
           </div>
 
@@ -392,7 +392,7 @@ export default function SettingsPage() {
                 : "text-slate-600 hover:bg-slate-100"
             }`}
           >
-            👨‍⚖️ Advokatlar ({countLawyers})
+            👨‍⚖️ Huquqshunoslar ({countLawyers})
           </button>
 
           <button
@@ -713,7 +713,7 @@ export default function SettingsPage() {
                 {/* 2. Lawyer ID */}
                 <div className="p-6">
                   <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                    👨‍⚖️ Birlamchi Advokat Telegram ID
+                    👨‍⚖️ Birlamchi Huquqshunos Telegram ID
                   </label>
                   <input
                     type="number"
@@ -728,7 +728,7 @@ export default function SettingsPage() {
                     className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder:text-slate-400"
                   />
                   <p className="mt-1.5 text-xs text-slate-400">
-                    Asosiy advokat hisobi. (Qo&apos;shimcha advokatlarni &quot;Rollar va Ruxsatlar&quot; bo&apos;limidan kiritishingiz mumkin).
+                    Asosiy huquqshunos hisobi. (Qo&apos;shimcha huquqshunoslarni &quot;Rollar va Ruxsatlar&quot; bo&apos;limidan kiritishingiz mumkin).
                   </p>
                 </div>
 
@@ -791,7 +791,7 @@ export default function SettingsPage() {
         <div className="space-y-6 pt-2">
         <div>
           <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-            <span>🧠</span> AI Advokat Ko'rsatmalari (Prompts)
+            <span>🧠</span> AI Huquqshunos Ko'rsatmalari (Prompts)
           </h2>
           <p className="text-sm text-slate-500 mt-1">
             Sun'iy intellektning harakteri, huquqiy tahlili va savdo takliflarini sozlang.
@@ -816,7 +816,7 @@ export default function SettingsPage() {
               {/* O'zbekcha Persona Prompt */}
               <div className="p-6">
                 <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  🇺🇿 O'zbekcha Advokat Personasi (Bosh Ko'rsatma)
+                  🇺🇿 O'zbekcha Huquqshunos Personasi (Bosh Ko'rsatma)
                 </label>
                 <textarea
                   rows={8}
@@ -830,7 +830,7 @@ export default function SettingsPage() {
               {/* Ruscha Persona Prompt */}
               <div className="p-6">
                 <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  🇷🇺 Ruscha Advokat Personasi (Bosh Ko'rsatma)
+                  🇷🇺 Ruscha Huquqshunos Personasi (Bosh Ko'rsatma)
                 </label>
                 <textarea
                   rows={8}
@@ -922,7 +922,7 @@ export default function SettingsPage() {
                   }
                   className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                 >
-                  <option value="lawyer">👨‍⚖️ Advokat (Lawyer — cheksiz savollar va mijozga javob)</option>
+                  <option value="lawyer">👨‍⚖️ Huquqshunos (Lawyer — cheksiz savollar va mijozga javob)</option>
                   <option value="group">👥 Bildirishnoma Guruhi (Yangi lidlar va to'lovlar guruhi)</option>
                   <option value="admin">🔑 Admin Panel Ruxsati (Boshqaruv paneli administratori)</option>
                 </select>
@@ -938,7 +938,7 @@ export default function SettingsPage() {
                   required
                   value={accessForm.name}
                   onChange={(e) => setAccessForm({ ...accessForm, name: e.target.value })}
-                  placeholder="Masalan: Advokat Alisher Qodirov yoki Toshkent Filiali Guruhi"
+                  placeholder="Masalan: Huquqshunos Alisher Qodirov yoki Toshkent Filiali Guruhi"
                   className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder:text-slate-400"
                 />
               </div>
@@ -970,7 +970,7 @@ export default function SettingsPage() {
                   rows={2}
                   value={accessForm.description}
                   onChange={(e) => setAccessForm({ ...accessForm, description: e.target.value })}
-                  placeholder="Masalan: Fuqarolik ishlari bo'yicha mas'ul advokat yoki Asosiy arizalar tushadigan guruh"
+                  placeholder="Masalan: Fuqarolik ishlari bo'yicha mas'ul huquqshunos yoki Asosiy arizalar tushadigan guruh"
                   className="w-full px-3.5 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder:text-slate-400"
                 />
               </div>
@@ -1031,7 +1031,7 @@ export default function SettingsPage() {
                         className="w-full px-3 py-2 text-xs font-mono border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 placeholder:text-slate-400"
                       />
                       <p className="text-[10px] text-slate-500 mt-0.5">
-                        To&apos;lov qilgan mijozlar bilan advokat tezkor bog&apos;lanishi uchun (Ism, telefon, xizmat turi, muammo)
+                        To&apos;lov qilgan mijozlar bilan huquqshunos tezkor bog&apos;lanishi uchun (Ism, telefon, xizmat turi, muammo)
                       </p>
                     </div>
 

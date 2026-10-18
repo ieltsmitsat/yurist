@@ -76,9 +76,9 @@ async def handle_start(message: Message, session: AsyncSession, user: User | Non
         is_lawyer = UserService.is_lawyer(current_user)
         if is_lawyer:
             balance_line = (
-                "🎁 Balansingiz: <b>Cheksiz (Advokat) ♾️</b>\n\n"
+                "🎁 Balansingiz: <b>Cheksiz (Huquqshunos) ♾️</b>\n\n"
                 if lang == "uz"
-                else "🎁 Баланс: <b>Неограничен (Адвокат) ♾️</b>\n\n"
+                else "🎁 Баланс: <b>Неограничен (Юрист) ♾️</b>\n\n"
             )
         else:
             balance_line = (
@@ -160,7 +160,7 @@ def _format_settings_content(
     lang = user.language
     ref_link = ReferralService.get_referral_link(bot_username, user)
     balance_val = (
-        "Cheksiz (Advokat) ♾️" if lang == "uz" else "Неограничен (Адвокат) ♾️"
+        "Cheksiz (Huquqshunos) ♾️" if lang == "uz" else "Неограничен (Юрист) ♾️"
     ) if is_lawyer else (
         f"{user.free_questions_left} ta" if lang == "uz" else f"{user.free_questions_left}"
     )

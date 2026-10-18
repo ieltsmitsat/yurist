@@ -119,7 +119,7 @@ class ChatService:
         messages = list(reversed(res.scalars().all()))
 
         user_label = "Клиент" if language == "ru" else "Mijoz"
-        lawyer_label = "Адвокат" if language == "ru" else "Advokat"
+        lawyer_label = "Юрист" if language == "ru" else "Huquqshunos"
         bot_label = "Юрист (Бот)" if language == "ru" else "Yurist (Bot)"
 
         # Fallback to Inquiries table if ChatMessage has no previous records

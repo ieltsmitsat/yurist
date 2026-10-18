@@ -7,14 +7,14 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
     # Inquiry flow
     "phone_required": {
         "uz": (
-            "Savolingizga javob berishdan oldin, advokat bilan uzluksiz aloqa uchun "
+            "Savolingizga javob berishdan oldin, huquqshunos bilan uzluksiz aloqa uchun "
             "iltimos, telefon raqamingizni yuboring:"
         ),
         "ru": "Перед консультацией, пожалуйста, отправьте ваш номер телефона:",
     },
     "phone_required_button": {
         "uz": (
-            "Savol yo'llashdan oldin, advokat bilan aloqa uchun "
+            "Savol yo'llashdan oldin, huquqshunos bilan aloqa uchun "
             "iltimos, telefon raqamingizni yuboring:"
         ),
         "ru": "Перед отправкой вопроса, пожалуйста, отправьте номер телефона:",
@@ -26,14 +26,14 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
     "balance_exhausted": {
         "uz": (
             "Hurmatli mijoz, bepul savollar balansingiz yakunlandi.\n"
-            "Advokat bilan shaxsiy konsultatsiya olishingiz yoki do'stlarni taklif qilib (+1 savol) olishingiz mumkin."
+            "Huquqshunos bilan shaxsiy konsultatsiya olishingiz yoki do'stlarni taklif qilib (+1 savol) olishingiz mumkin."
         ),
         "ru": "Лимит бесплатных консультаций исчерпан. Запишитесь на консультацию или пригласите друзей (+1 вопрос).",
     },
     "balance_exhausted_voice": {
         "uz": (
             "Hurmatli mijoz, bepul savollar balansingiz yakunlandi.\n"
-            "Advokat bilan to'liq maslahatlashish uchun xizmat turini tanlang."
+            "Huquqshunos bilan to'liq maslahatlashish uchun xizmat turini tanlang."
         ),
         "ru": "Лимит бесплатных консультаций исчерпан. Выберите подходящую услугу.",
     },
@@ -41,12 +41,12 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "uz": (
             "💬 <b>Yuridik savol berish</b>\n\n"
             "Savolingizni matn yoki ovozli xabar ko'rinishida yozib qoldiring. "
-            "Advokat masalani o'rganib, qisqa va aniq huquqiy xulosa beradi."
+            "Huquqshunos masalani o'rganib, qisqa va aniq huquqiy xulosa beradi."
         ),
         "ru": (
             "💬 <b>Задать правовой вопрос</b>\n\n"
             "Отправьте ваш вопрос текстом или голосовым сообщением. "
-            "Адвокат предоставит краткий и точный правовой ответ."
+            "Юрист предоставит краткий и точный правовой ответ."
         ),
     },
     "greeting_reply": {
@@ -59,10 +59,10 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
     },
     "error_text_inquiry": {
         "uz": (
-            "Savolingiz qabul qilindi. Hozirda advokat ma'lumotlarni tahlil qilmoqda, "
+            "Savolingiz qabul qilindi. Hozirda huquqshunos ma'lumotlarni tahlil qilmoqda, "
             "birozdan so'ng to'liq javob yetkaziladi."
         ),
-        "ru": "Ваш вопрос принят. Адвокат изучает материалы, ответ будет предоставлен в ближайшее время.",
+        "ru": "Ваш вопрос принят. Юрист изучает материалы, ответ будет предоставлен в ближайшее время.",
     },
     "error_voice_inquiry": {
         "uz": (

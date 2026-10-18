@@ -234,7 +234,7 @@ export default function ChatsPage() {
                         }`}
                       >
                         <div className={`text-[10px] font-semibold mb-1 ${isLawyer ? "text-indigo-200" : "text-slate-400"}`}>
-                          {isLawyer ? "Advokat (Siz)" : isBot ? "Bot / AI" : "Mijoz"}
+                          {isLawyer ? "Huquqshunos (Siz)" : isBot ? "Bot / AI" : "Mijoz"}
                         </div>
                         <div className="whitespace-pre-wrap text-sm leading-relaxed">{m.text}</div>
                         <div className={`text-[10px] text-right mt-1 ${isLawyer ? "text-indigo-200" : "text-slate-400"}`}>

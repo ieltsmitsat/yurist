@@ -22,9 +22,9 @@ def format_service_details_text(service_title: str, service_desc: str | None, pr
     if lang == "uz":
         return (
             f"💼 <b>{service_title}</b>\n\n"
-            f"{service_desc or 'Professional advokatlik xizmati.'}\n\n"
+            f"{service_desc or 'Professional yuridik xizmat.'}\n\n"
             f"💵 <b>Rasmiy narxi:</b> {price_fmt}\n"
-            "🛡 <b>Kafolat:</b> Rasmiy advokatlik orderi/shartnomasi va to'liq maxfiylik.\n"
+            "🛡 <b>Kafolat:</b> Rasmiy shartnoma va to'liq maxfiylik.\n"
             "⏱ <b>Bajarilish muddati:</b> To'lov tasdiqlangach 24 soat ichida (yoki kelishuv asosida).\n\n"
             "<i>Quyidagi to'lov yoki bog'lanish usulini tanlang:</i>"
         )
@@ -32,9 +32,9 @@ def format_service_details_text(service_title: str, service_desc: str | None, pr
         f"💼 <b>{service_title}</b>\n\n"
         f"{service_desc or 'Квалифицированная юридическая помощь.'}\n\n"
         f"💵 <b>Стоимость:</b> {price_fmt}\n"
-        "🛡 <b>Гарантия:</b> Официальный адвокатский договор и полная конфиденциальность.\n"
+        "🛡 <b>Гарантия:</b> Официальный юридический договор и полная конфиденциальность.\n"
         "⏱ <b>Срок исполнения:</b> В течение 24 часов после оплаты (или по договоренности).\n\n"
-        "<i>Выберите способ оплаты или связи с адвокатом:</i>"
+        "<i>Выберите способ оплаты или связи с юристом:</i>"
     )
 
 
@@ -52,16 +52,16 @@ async def handle_services_menu(
 
     intro = (
         "💼 <b>Yuridik Xizmatlar va Rasmiy Tariflar</b>\n\n"
-        "Malakali advokatlar tomonidan ko'rsatiladigan professional huquqiy xizmatlar bilan tanishing va o'zingizga keraklisini tanlang:\n\n"
-        "✅ Rasmiy advokatlik shartnomasi va orderi\n"
+        "Malakali huquqshunoslar tomonidan ko'rsatiladigan professional huquqiy xizmatlar bilan tanishing va o'zingizga keraklisini tanlang:\n\n"
+        "✅ Rasmiy yuridik shartnoma\n"
         "✅ 100% maxfiylik va himoya kafolati\n"
         "✅ Qonuniy asoslangan professional yondashuv"
         if lang == "uz"
         else "💼 <b>Юридические Услуги и Тарифы</b>\n\n"
         "Ознакомьтесь с перечнем профессиональных правовых услуг и выберите нужный тариф:\n\n"
-        "✅ Официальный адвокатский договор и ордер\n"
+        "✅ Официальный юридический договор\n"
         "✅ 100% конфиденциальность и защита ваших прав\n"
-        "✅ Опытные лицензированные специалисты"
+        "✅ Опытные квалифицированные специалисты"
     )
     await message.answer(intro, reply_markup=services_catalog_kb(services, lang))
 
@@ -191,17 +191,17 @@ async def handle_p2p_payment(
         f"💼 Xizmat: <b>{service.title_uz}</b>\n"
         f"💵 To'lov summasi: <b>{price_fmt}</b>\n\n"
         "💳 Karta raqami: <code>9860 0001 2345 6789</code>\n"
-        "👤 Qabul qiluvchi: <b>Advokatlik Byurosi</b>\n\n"
+        "👤 Qabul qiluvchi: <b>Yuridik Xizmatlar</b>\n\n"
         "<i>To'lovni amalga oshirgach, to'lov cheki (skrinshot yoki PDF)ni ushbu bot chatiga yuboring. "
-        "Advokat to'lovni tasdiqlashi bilan xizmat ijrosi boshlanadi.</i>"
+        "Huquqshunos to'lovni tasdiqlashi bilan xizmat ijrosi boshlanadi.</i>"
         if lang == "uz"
         else f"💳 <b>Оплата по карте (Транзакция #{tx.id})</b>\n\n"
         f"💼 Услуга: <b>{service.title_ru}</b>\n"
         f"💵 Сумма к оплате: <b>{price_fmt}</b>\n\n"
         "💳 Номер карты: <code>9860 0001 2345 6789</code>\n"
-        "👤 Получатель: <b>Адвокатское Бюро</b>\n\n"
+        "👤 Получатель: <b>Юридические Услуги</b>\n\n"
         "<i>После оплаты отправьте квитанцию или чек в этот чат. "
-        "После подтверждения адвокатом оказание услуги начнется незамедлительно.</i>"
+        "После подтверждения юристом оказание услуги начнется незамедлительно.</i>"
     )
     await callback.answer()
     if isinstance(callback.message, Message):
@@ -255,12 +255,12 @@ async def handle_stars_payment(
         f"💼 Xizmat: <b>{service.title_uz}</b>\n"
         f"💵 Narxi: <b>{price_fmt}</b>\n\n"
         "Telegram Stars orqali individual hisob-faktura (invoys) olish uchun "
-        "advokat bilan bog'laning yoki advokatning javobini kuting."
+        "huquqshunos bilan bog'laning yoki huquqshunosning javobini kuting."
         if lang == "uz"
         else f"⭐ <b>Заказ через Telegram Stars (Транзакция #{tx.id})</b>\n\n"
         f"💼 Услуга: <b>{service.title_ru}</b>\n"
         f"💵 Стоимость: <b>{price_fmt}</b>\n\n"
-        "Для выставления индивидуального счета в Telegram Stars свяжитесь с адвокатом "
+        "Для выставления индивидуального счета в Telegram Stars свяжитесь с юристом "
         "или ожидайте сообщения от специалиста."
     )
     await callback.answer()
@@ -276,13 +276,13 @@ async def handle_contact_lawyer(callback: CallbackQuery, user: User | None = Non
 
     lang = user.language if user else "uz"
     text = (
-        "👤 <b>Advokat bilan to'g'ridan-to'g'ri aloqa:</b>\n\n"
+        "👤 <b>Huquqshunos bilan to'g'ridan-to'g'ri aloqa:</b>\n\n"
         "📞 Telefon: +998 (71) 200-00-00\n"
         "🏢 Manzil: Toshkent sh., Chilonzor tumani, Bunyodkor shoh ko'chasi, 15-uy\n"
         "⏰ Ish vaqti: Dushanba — Shanba, 09:00 dan 18:00 gacha\n\n"
         "<i>Shoshilinch vaziyatlarda Favqulodda SOS bo'limidan foydalaning.</i>"
         if lang == "uz"
-        else "👤 <b>Прямой контакт с адвокатом:</b>\n\n"
+        else "👤 <b>Прямой контакт с юристом:</b>\n\n"
         "📞 Телефон: +998 (71) 200-00-00\n"
         "🏢 Адрес: г. Ташкент, Чиланзарский р-н, пр-т Бунёдкор, 15\n"
         "⏰ График: Понедельник — Суббота, с 09:00 до 18:00\n\n"

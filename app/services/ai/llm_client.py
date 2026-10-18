@@ -257,7 +257,7 @@ class LLMService:
         safe_summary = PIIMasker.redact_financial(inquiry_summary)
         if language == "uz":
             prompt = (
-                f"Siz advokatsiz. Mijoz {hours_passed} soat oldin quyidagi masala bo'yicha yozgan edi: '{safe_summary}'.\n"
+                f"Siz huquqshunossiz. Mijoz {hours_passed} soat oldin quyidagi masala bo'yicha yozgan edi: '{safe_summary}'.\n"
                 "Mijoz hali konsultatsiyaga yozilmadi yoki ishni davom ettirmadi.\n"
                 "Unga samimiy, insoniy tarzda eslatma yozing: qonunchilikdagi muddatlar o'tib ketishi xavfi borligini va "
                 "masalani kechiktirmay birgalikda ko'rib chiqish maqsadga muvofiqligini ayting. Qisqa, 2-3 ta gap."
@@ -265,7 +265,7 @@ class LLMService:
             system_prompt = PromptManager.get("PERSONA_SYSTEM_PROMPT_UZ")
         else:
             prompt = (
-                f"Вы адвокат. Клиент {hours_passed} ч. назад обращался с вопросом: '{inquiry_summary}'.\n"
+                f"Вы юрист. Клиент {hours_passed} ч. назад обращался с вопросом: '{inquiry_summary}'.\n"
                 "Клиент еще не записался на консультацию. Напишите теплое, ненавязчивое напоминание от первого лица "
                 "о процессуальных сроках и важности своевременных действий. Кратко, 2-3 предложения."
             )
@@ -287,7 +287,7 @@ class LLMService:
         risk_level = "medium"
         risk_score = 50
         upsell_offer = (
-            "Shaxsiy advokat maslahatiga yozilishni tavsiya qilaman."
+            "Shaxsiy huquqshunos maslahatiga yozilishni tavsiya qilaman."
             if language == "uz"
             else "Рекомендую записаться на индивидуальную консультацию."
         )

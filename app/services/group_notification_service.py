@@ -97,7 +97,7 @@ class GroupNotificationService:
                 snippet = snippet[:397] + "..."
             caption += f"\n📋 <b>Muammo / Xizmat:</b>\n<i>{snippet}</i>\n"
 
-        caption += "\n👉 <i>Advokat to'lovni tasdiqlashi yoki tekshirishi kutilmoqda.</i>"
+        caption += "\n👉 <i>Huquqshunos to'lovni tasdiqlashi yoki tekshirishi kutilmoqda.</i>"
 
         sent_count = 0
         for group_id, thread_id in destinations:
@@ -137,7 +137,7 @@ class GroupNotificationService:
             return 0
 
         text = (
-            "📞 <b>MIJOZ BILAN ALOQA (Advokat qo'ng'iroq qilishi uchun)</b>\n\n"
+            "📞 <b>MIJOZ BILAN ALOQA (Huquqshunos qo'ng'iroq qilishi uchun)</b>\n\n"
             f"👤 <b>Mijoz:</b> {user.full_name or 'Noma\'lum'}\n"
             f"📱 <b>Telefon:</b> {user.phone_number or 'Kiritilmagan'}\n"
             f"🆔 <b>Telegram ID:</b> <code>{user.telegram_id}</code>\n"

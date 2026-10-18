@@ -24,7 +24,7 @@ def format_referral_text(user: User, ref_link: str, stats: dict[str, int]) -> st
     lang = user.language
     is_lawyer = UserService.is_lawyer(user)
     balance_str = (
-        "Cheksiz (Advokat) ♾️" if lang == "uz" else "Неограниченно (Адвокат) ♾️"
+        "Cheksiz (Huquqshunos) ♾️" if lang == "uz" else "Неограниченно (Юрист) ♾️"
     ) if is_lawyer else (
         f"{user.free_questions_left} ta" if lang == "uz" else f"{user.free_questions_left} вопросов"
     )
