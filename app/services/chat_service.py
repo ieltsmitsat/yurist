@@ -97,6 +97,69 @@ class ChatService:
         return res.scalars().all()
 
     @classmethod
+    async def get_recent_history_context(
+        cls,
+        session: AsyncSession,
+        user_id: int,
+        limit: int = 10,
+        exclude_message_ids: Sequence[int] | None = None,
+        language: str = "uz",
+    ) -> str | None:
+        """Fetch recent conversation history formatted for LLM context memory.
+
+        Retrieves the latest messages between the user and the bot/lawyer,
+        ordered chronologically, so the AI remembers past discussions across days.
+        """
+        stmt = select(ChatMessage).where(ChatMessage.user_id == user_id)
+        if exclude_message_ids:
+            stmt = stmt.where(ChatMessage.id.not_in(exclude_message_ids))
+        stmt = stmt.order_by(ChatMessage.created_at.desc()).limit(limit)
+
+        res = await session.execute(stmt)
+        messages = list(reversed(res.scalars().all()))
+
+        user_label = "Клиент" if language == "ru" else "Mijoz"
+        lawyer_label = "Адвокат" if language == "ru" else "Advokat"
+        bot_label = "Юрист (Бот)" if language == "ru" else "Yurist (Bot)"
+
+        # Fallback to Inquiries table if ChatMessage has no previous records
+        if not messages:
+            stmt_inq = (
+                select(Inquiry)
+                .where(Inquiry.user_id == user_id)
+                .order_by(Inquiry.created_at.desc())
+                .limit(3)
+            )
+            res_inq = await session.execute(stmt_inq)
+            inquiries = list(reversed(res_inq.scalars().all()))
+            if not inquiries:
+                return None
+            lines: list[str] = []
+            for inq in inquiries:
+                q = (inq.question_text or inq.stt_transcript or "").strip()
+                ans = (inq.final_response or inq.ai_draft_response or "").strip()
+                if q:
+                    lines.append(f"{user_label}: {q}")
+                if ans:
+                    clean_ans = ans.split("```json")[0].strip()
+                    lines.append(f"{lawyer_label}: {clean_ans}")
+            return "\n".join(lines) if lines else None
+
+        lines = []
+        for m in messages:
+            if not m.text:
+                continue
+            role = user_label if m.sender_type == "user" else (lawyer_label if m.sender_type == "lawyer" else bot_label)
+            time_prefix = ""
+            if m.created_at:
+                time_prefix = f"[{m.created_at.strftime('%Y-%m-%d %H:%M')}] "
+            clean_text = m.text.split("```json")[0].strip()
+            if clean_text:
+                lines.append(f"{time_prefix}{role}: {clean_text}")
+
+        return "\n".join(lines) if lines else None
+
+    @classmethod
     async def get_dialogs_list(
         cls,
         session: AsyncSession,

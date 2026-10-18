@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.db.session import get_db_session
 from app.services.access_service import AccessService
+from app.services.inquiry_debouncer import inquiry_debouncer
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -22,12 +23,14 @@ class BotSettingsResponse(BaseModel):
     lawyer_telegram_id: int | None
     admin_group_id: int | None
     admin_telegram_ids: str
+    inquiry_debounce_seconds: float = 3.0
 
 
 class BotSettingsUpdate(BaseModel):
     lawyer_telegram_id: int | None = None
     admin_group_id: int | None = None
     admin_telegram_ids: str | None = None
+    inquiry_debounce_seconds: float | None = None
 
 
 @router.get("/bot", response_model=BotSettingsResponse)
@@ -37,6 +40,7 @@ async def get_bot_settings() -> dict[str, Any]:
         "lawyer_telegram_id": settings.LAWYER_TELEGRAM_ID,
         "admin_group_id": settings.ADMIN_GROUP_ID,
         "admin_telegram_ids": settings.ADMIN_TELEGRAM_IDS,
+        "inquiry_debounce_seconds": inquiry_debouncer.debounce_seconds,
     }
 
 
@@ -56,10 +60,16 @@ async def update_bot_settings(payload: BotSettingsUpdate) -> dict[str, Any]:
             settings.ADMIN_TELEGRAM_IDS = payload.admin_telegram_ids
             set_key(ENV_FILE, "ADMIN_TELEGRAM_IDS", payload.admin_telegram_ids)
 
+        if payload.inquiry_debounce_seconds is not None:
+            settings.INQUIRY_DEBOUNCE_SECONDS = payload.inquiry_debounce_seconds
+            inquiry_debouncer.debounce_seconds = payload.inquiry_debounce_seconds
+            set_key(ENV_FILE, "INQUIRY_DEBOUNCE_SECONDS", str(payload.inquiry_debounce_seconds))
+
         return {
             "lawyer_telegram_id": settings.LAWYER_TELEGRAM_ID,
             "admin_group_id": settings.ADMIN_GROUP_ID,
             "admin_telegram_ids": settings.ADMIN_TELEGRAM_IDS,
+            "inquiry_debounce_seconds": inquiry_debouncer.debounce_seconds,
         }
     except Exception as e:  # noqa: BLE001
         raise HTTPException(

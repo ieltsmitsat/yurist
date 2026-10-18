@@ -1,6 +1,7 @@
 """Start, language selection, and user settings handlers."""
 
 import logging
+from typing import Any
 
 from aiogram import Bot, F, Router
 from aiogram.filters import CommandStart
@@ -15,6 +16,7 @@ from app.bot.keyboards.keyboards import (
 )
 from app.core.config import settings
 from app.db.models.user import User
+from app.services.access_service import AccessService
 from app.services.referral_service import ReferralService
 from app.services.user_service import UserService
 
@@ -149,20 +151,14 @@ async def handle_set_language(
         await callback.message.answer("Asosiy menyu:", reply_markup=main_menu_kb(lang))
 
 
-@router.message(F.text.in_(["⚙️ Sozlamalar", "⚙️ Настройки"]))
-async def handle_settings_menu(
-    message: Message, session: AsyncSession, bot: Bot, user: User | None = None
-) -> None:
-    """Display user account settings and language switch."""
-    if not user:
-        return
-
+def _format_settings_content(
+    user: User,
+    bot_username: str,
+    is_lawyer: bool,
+) -> tuple[str, Any]:
+    """Helper to format profile text and keyboard for settings menu."""
     lang = user.language
-    bot_info = await bot.get_me()
-    bot_username = bot_info.username or settings.BOT_USERNAME
     ref_link = ReferralService.get_referral_link(bot_username, user)
-
-    is_lawyer = UserService.is_lawyer(user)
     balance_val = (
         "Cheksiz (Advokat) ♾️" if lang == "uz" else "Неограничен (Адвокат) ♾️"
     ) if is_lawyer else (
@@ -177,7 +173,7 @@ async def handle_settings_menu(
             f"🌐 <b>Muloqot tili:</b> O'zbekcha 🇺🇿\n"
             f"🎁 <b>Bepul savollar balansi:</b> {balance_val}\n"
             f"🔗 <b>Taklif havolangiz:</b> <code>{ref_link}</code>\n\n"
-            "Tilni o'zgartirish uchun pastdagi tugmani bosing:"
+            "Kerakli amalni tanlang:"
         )
     else:
         info_text = (
@@ -187,10 +183,27 @@ async def handle_settings_menu(
             f"🌐 <b>Язык интерфейса:</b> Русский 🇷🇺\n"
             f"🎁 <b>Баланс консультаций:</b> {balance_val}\n"
             f"🔗 <b>Ваша реферальная ссылка:</b> <code>{ref_link}</code>\n\n"
-            "Для изменения языка воспользуйтесь кнопкой ниже:"
+            "Выберите действие:"
         )
 
-    await message.answer(info_text, reply_markup=settings_kb(lang))
+    kb = settings_kb(lang)
+    return info_text, kb
+
+
+@router.message(F.text.in_(["⚙️ Sozlamalar", "⚙️ Настройки"]))
+async def handle_settings_menu(
+    message: Message, session: AsyncSession, bot: Bot, user: User | None = None
+) -> None:
+    """Display user account settings and language switch."""
+    if not user:
+        return
+
+    bot_info = await bot.get_me()
+    bot_username = bot_info.username or settings.BOT_USERNAME
+    is_lawyer = UserService.is_lawyer(user) or await AccessService.is_lawyer(session, user.telegram_id)
+
+    info_text, kb = _format_settings_content(user, bot_username, is_lawyer)
+    await message.answer(info_text, reply_markup=kb)
 
 
 @router.callback_query(F.data == "settings:change_lang")

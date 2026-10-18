@@ -251,6 +251,7 @@ export interface BotSettings {
   lawyer_telegram_id: number | null;
   admin_group_id: number | null;
   admin_telegram_ids: string | null;
+  inquiry_debounce_seconds?: number;
 }
 
 export interface Prompts {

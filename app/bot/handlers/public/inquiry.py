@@ -9,14 +9,17 @@ from typing import Any
 
 from aiogram import Bot, F, Router
 from aiogram.types import Message
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.i18n import t
 from app.bot.keyboards.keyboards import cta_keyboard, phone_request_kb
 from app.core.config import settings
 from app.db.models.user import User
+from app.db.session import AsyncSessionLocal
 from app.services.access_service import AccessService
 from app.services.chat_service import ChatService
+from app.services.inquiry_debouncer import BufferedMessage, inquiry_debouncer
 from app.services.inquiry_service import InquiryService
 from app.services.user_service import UserService
 
@@ -159,7 +162,7 @@ async def _check_preconditions(
 @router.message(F.text.in_(["💬 Yuridik savol berish", "💬 Задать правовой вопрос"]))
 async def handle_inquiry_button_click(
     message: Message,
-    session: AsyncSession,
+    session: AsyncSession | None = None,
     user: User | None = None,
 ) -> None:
     """Handle click on 'Ask Legal Question' button from main menu."""
@@ -173,6 +176,123 @@ async def handle_inquiry_button_click(
 
     lang = user.language if user else "uz"
     await message.answer(t("inquiry_invite", lang))
+
+
+async def process_aggregated_inquiry(
+    user: User,
+    batch: list[BufferedMessage],
+    bot: Bot,
+) -> None:
+    """Process a batch of aggregated messages from a user as a single legal inquiry."""
+    if not batch:
+        return
+
+    last_message = batch[-1].message
+    batch_msg_ids = [m.logged_msg_id for m in batch]
+    combined_text = "\n".join(m.text.strip() for m in batch if m.text.strip())
+
+    if not combined_text:
+        return
+
+    async with AsyncSessionLocal() as session:
+        # Reload user from DB for fresh state (balance, subscription, language)
+        stmt = select(User).where(User.id == user.id)
+        res = await session.execute(stmt)
+        fresh_user = res.scalar_one_or_none() or user
+
+        # 1. Check preconditions (phone verification and question balance)
+        if not await _check_preconditions(last_message, fresh_user, session=session):
+            return
+
+        lang = fresh_user.language or "uz"
+
+        # 2. Check if combined text is ONLY a greeting
+        clean_text = combined_text.strip().lower()
+        greetings = {
+            "salom",
+            "assalomu alaykum",
+            "assalom",
+            "assalomu aleykum",
+            "salomalaykum",
+            "privet",
+            "привет",
+            "здравствуйте",
+            "добрый день",
+            "salom yaxshimisiz",
+            "assalomu alaykum yaxshimisiz",
+            "salom salom",
+        }
+        if clean_text in greetings:
+            greet_reply = t("greeting_reply", lang)
+            await last_message.answer(greet_reply)
+            await ChatService.log_message(
+                session=session,
+                user_id=fresh_user.id,
+                telegram_id=fresh_user.telegram_id,
+                sender_type="bot",
+                text=greet_reply,
+            )
+            return
+
+        if len(clean_text) < 6:
+            too_short_msg = t("too_short", lang)
+            await last_message.answer(too_short_msg)
+            await ChatService.log_message(
+                session=session,
+                user_id=fresh_user.id,
+                telegram_id=fresh_user.telegram_id,
+                sender_type="bot",
+                text=too_short_msg,
+            )
+            return
+
+        # 3. Simulate human typing
+        typing_delay = min(max(len(combined_text) * 0.005, 1.0), 2.5)
+        await _simulate_typing(bot, fresh_user.telegram_id, duration=typing_delay)
+
+        # 4. Process inquiry with AI Persona, RAG, and conversation history
+        try:
+            _inquiry, analysis = await inquiry_service.process_text_inquiry(
+                session=session,
+                user=fresh_user,
+                question_text=combined_text,
+                exclude_message_ids=batch_msg_ids,
+            )
+
+            # 5. Send legal response safely
+            reply_kb = (
+                cta_keyboard(analysis.cta_type, lang)
+                if analysis.is_legal_case and analysis.cta_type != "none"
+                else None
+            )
+            await _send_safe_response(last_message, analysis.response_text, reply_kb)
+            await ChatService.log_message(
+                session=session,
+                user_id=fresh_user.id,
+                telegram_id=fresh_user.telegram_id,
+                sender_type="bot",
+                text=analysis.response_text,
+            )
+
+            # 6. Notify admin if high risk
+            if analysis.is_legal_case and analysis.risk_level == "high":
+                await _notify_admin_high_risk(bot, fresh_user, combined_text, analysis.risk_score)
+
+        except Exception as e:  # noqa: BLE001
+            logger.error("Error handling aggregated inquiry for user #%d: %s", fresh_user.id, e)
+            err_msg = t("error_text_inquiry", lang)
+            await last_message.answer(err_msg)
+            await ChatService.log_message(
+                session=session,
+                user_id=fresh_user.id,
+                telegram_id=fresh_user.telegram_id,
+                sender_type="bot",
+                text=err_msg,
+            )
+
+
+# Wire the debouncer processor
+inquiry_debouncer.set_processor(process_aggregated_inquiry)
 
 
 @router.message(
@@ -201,14 +321,12 @@ async def handle_text_inquiry(
     bot: Bot,
     user: User | None = None,
 ) -> None:
-    """Handle text legal inquiry with Undetectable AI Persona."""
+    """Handle text legal inquiry with message debouncing and aggregation."""
     if not message.from_user or not message.text or not user:
         return
 
-    lang = user.language if user else "uz"
-
-    # 1. Log incoming user message immediately so it's never lost in Inbox
-    await ChatService.log_message(
+    # 1. Log incoming user message immediately so it's recorded in real time
+    logged_msg = await ChatService.log_message(
         session=session,
         user_id=user.id,
         telegram_id=user.telegram_id,
@@ -217,88 +335,13 @@ async def handle_text_inquiry(
         telegram_message_id=message.message_id,
     )
 
-    if not await _check_preconditions(message, user, session=session):
-        return
-
-    # Handle greetings gracefully without consuming free question balance
-    clean_text = message.text.strip().lower()
-    greetings = {
-        "salom",
-        "assalomu alaykum",
-        "assalom",
-        "assalomu aleykum",
-        "salomalaykum",
-        "privet",
-        "привет",
-        "здравствуйте",
-        "добрый день",
-    }
-    if clean_text in greetings:
-        greet_reply = t("greeting_reply", lang)
-        await message.answer(greet_reply)
-        await ChatService.log_message(
-            session=session,
-            user_id=user.id,
-            telegram_id=user.telegram_id,
-            sender_type="bot",
-            text=greet_reply,
-        )
-        return
-
-    if len(clean_text) < 6:
-        too_short_msg = t("too_short", lang)
-        await message.answer(too_short_msg)
-        await ChatService.log_message(
-            session=session,
-            user_id=user.id,
-            telegram_id=user.telegram_id,
-            sender_type="bot",
-            text=too_short_msg,
-        )
-        return
-
-    # 3. Simulate human typing
-    typing_delay = min(max(len(message.text) * 0.005, 1.0), 2.5)
-    await _simulate_typing(bot, message.chat.id, duration=typing_delay)
-
-    # 4. Process inquiry with AI Persona & RAG
-    try:
-        _inquiry, analysis = await inquiry_service.process_text_inquiry(
-            session=session,
-            user=user,
-            question_text=message.text,
-        )
-
-        # 5. Send legal response safely
-        reply_kb = (
-            cta_keyboard(analysis.cta_type, lang)
-            if analysis.is_legal_case and analysis.cta_type != "none"
-            else None
-        )
-        await _send_safe_response(message, analysis.response_text, reply_kb)
-        await ChatService.log_message(
-            session=session,
-            user_id=user.id,
-            telegram_id=user.telegram_id,
-            sender_type="bot",
-            text=analysis.response_text,
-        )
-
-        # 6. Notify admin if high risk
-        if analysis.is_legal_case and analysis.risk_level == "high":
-            await _notify_admin_high_risk(bot, user, message.text, analysis.risk_score)
-
-    except Exception as e:  # noqa: BLE001
-        logger.error("Error handling text inquiry: %s", e)
-        err_msg = t("error_text_inquiry", lang)
-        await message.answer(err_msg)
-        await ChatService.log_message(
-            session=session,
-            user_id=user.id,
-            telegram_id=user.telegram_id,
-            sender_type="bot",
-            text=err_msg,
-        )
+    # 2. Add to debounce aggregator (groups multiple consecutive messages into 1 inquiry)
+    await inquiry_debouncer.add_message(
+        user=user,
+        message=message,
+        logged_msg_id=logged_msg.id,
+        bot=bot,
+    )
 
 
 @router.message(F.voice)

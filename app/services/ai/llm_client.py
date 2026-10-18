@@ -133,14 +133,28 @@ class LLMService:
         question: str,
         language: str = "uz",
         rag_context: str | None = None,
+        conversation_history: str | None = None,
     ) -> LegalAnalysisResult:
         """Generate humanlike lawyer response and risk scoring for client inquiry."""
         system_prompt = PromptManager.get("PERSONA_SYSTEM_PROMPT_UZ") if language == "uz" else PromptManager.get("PERSONA_SYSTEM_PROMPT_RU")
 
         # Local PII Redaction before sending to LLM (OWASP security-pii-masker rule)
-        user_content = PIIMasker.redact_financial(question)
+        sanitized_question = PIIMasker.redact_financial(question)
+
+        content_parts: list[str] = []
+        if conversation_history:
+            content_parts.append(f"<conversation_history>\n{conversation_history}\n</conversation_history>")
+
+        if conversation_history:
+            current_prefix = "Mijozning joriy murojaati:\n" if language == "uz" else "Текущее обращение клиента:\n"
+            content_parts.append(f"{current_prefix}{sanitized_question}")
+        else:
+            content_parts.append(sanitized_question)
+
         if rag_context:
-            user_content += f"\n\n<legal_context>\n{rag_context}\n</legal_context>"
+            content_parts.append(f"<legal_context>\n{rag_context}\n</legal_context>")
+
+        user_content = "\n\n".join(content_parts)
 
         format_instruction = (
             "\n\nMUHIM QOIDA: Mijozning xabariga faqat qisqa va lo'nda javob yozing.\n"

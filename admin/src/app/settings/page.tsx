@@ -16,8 +16,11 @@ import {
 } from "@/lib/api";
 
 type RoleFilter = "all" | "lawyer" | "group" | "admin";
+type SettingsSection = "bot" | "access" | "prompts";
 
 export default function SettingsPage() {
+  const [activeSection, setActiveSection] = useState<SettingsSection>("bot");
+
   // Access Management State
   const [accessList, setAccessList] = useState<SystemAccessItem[]>([]);
   const [activeTab, setActiveTab] = useState<RoleFilter>("all");
@@ -39,6 +42,7 @@ export default function SettingsPage() {
     lawyer_telegram_id: null,
     admin_group_id: null,
     admin_telegram_ids: "",
+    inquiry_debounce_seconds: 3.0,
   });
 
   // Prompts State
@@ -72,6 +76,7 @@ export default function SettingsPage() {
           lawyer_telegram_id: settingsRes.value.lawyer_telegram_id || null,
           admin_group_id: settingsRes.value.admin_group_id || null,
           admin_telegram_ids: settingsRes.value.admin_telegram_ids || "",
+          inquiry_debounce_seconds: settingsRes.value.inquiry_debounce_seconds ?? 3.0,
         });
       }
 
@@ -196,6 +201,10 @@ export default function SettingsPage() {
         lawyer_telegram_id: settings.lawyer_telegram_id ? Number(settings.lawyer_telegram_id) : null,
         admin_group_id: settings.admin_group_id ? Number(settings.admin_group_id) : null,
         admin_telegram_ids: settings.admin_telegram_ids,
+        inquiry_debounce_seconds:
+          settings.inquiry_debounce_seconds !== undefined
+            ? Number(settings.inquiry_debounce_seconds)
+            : 3.0,
       };
 
       await updateBotSettings(payload);
@@ -273,17 +282,57 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-12 pb-24">
-      {/* 1. Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">⚙️ Tizim Sozlamalari va Ruxsatlar</h1>
-        <p className="text-sm text-slate-500 mt-1">
-          Advokatlar, bildirishnoma guruhlari, adminlar va AI bot xatti-harakatini to'liq boshqaring.
-        </p>
+    <div className="max-w-5xl mx-auto space-y-8 pb-24">
+      {/* 1. Header & Section Tabs */}
+      <div className="space-y-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">⚙️ Tizim Sozlamalari</h1>
+          <p className="text-sm text-slate-500 mt-1">
+            Bot konfiguratsiyasi, xabarlarni yig&apos;ish (debounce), ruxsatlar va AI ko&apos;rsatmalari.
+          </p>
+        </div>
+
+        {/* Section Navigation Tabs */}
+        <div className="flex items-center gap-2 border-b border-slate-200 pb-3 overflow-x-auto">
+          <button
+            type="button"
+            onClick={() => setActiveSection("bot")}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all cursor-pointer ${
+              activeSection === "bot"
+                ? "bg-indigo-600 text-white shadow-sm"
+                : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+            }`}
+          >
+            <span>🤖</span> Bot Sozlamalari &amp; Debounce
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveSection("access")}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all cursor-pointer ${
+              activeSection === "access"
+                ? "bg-indigo-600 text-white shadow-sm"
+                : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+            }`}
+          >
+            <span>👥</span> Rollar va Ruxsatlar ({accessList.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveSection("prompts")}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all cursor-pointer ${
+              activeSection === "prompts"
+                ? "bg-indigo-600 text-white shadow-sm"
+                : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+            }`}
+          >
+            <span>🧠</span> AI Ko&apos;rsatmalari (Prompts)
+          </button>
+        </div>
       </div>
 
       {/* 2. Unified Access Management Section */}
-      <div className="space-y-5">
+      {activeSection === "access" && (
+        <div className="space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
@@ -497,110 +546,179 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
+      )}
 
-      {/* 3. Global / Fallback Bot Settings */}
-      <div className="space-y-6 pt-6 border-t border-slate-200">
-        <div>
-          <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-            <span>⚙️</span> Asosiy / Birlamchi Bot Konfiguratsiyasi
-          </h2>
-          <p className="text-sm text-slate-500 mt-0.5">
-            Tizimning asosiy standart konfiguratsiyasi va .env sozlamalari
-          </p>
-        </div>
-
-        {message && (
-          <div
-            className={`p-4 rounded-xl text-sm font-medium ${
-              message.type === "success"
-                ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
-                : "bg-red-50 text-red-800 border border-red-200"
-            }`}
-          >
-            {message.text}
+      {/* 3. Global / Bot Settings & Debounce */}
+      {activeSection === "bot" && (
+        <div className="space-y-6 pt-2">
+          <div>
+            <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+              <span>🤖</span> Bot Konfiguratsiyasi va Xabarlarni Yig&apos;ish (Debounce)
+            </h2>
+            <p className="text-sm text-slate-500 mt-0.5">
+              Mijoz ketma-ket yozgan xabarlarini bitta savolga umumlashtirish vaqti va tizim sozlamalari
+            </p>
           </div>
-        )}
 
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-          <form onSubmit={handleSaveSettings}>
-            <div className="divide-y divide-slate-100">
-              {/* Lawyer ID */}
-              <div className="p-6">
-                <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                  👨‍⚖️ Birlamchi Advokat Telegram ID
-                </label>
-                <input
-                  type="number"
-                  value={settings.lawyer_telegram_id || ""}
-                  onChange={(e) =>
-                    setSettings({
-                      ...settings,
-                      lawyer_telegram_id: e.target.value ? Number(e.target.value) : null,
-                    })
-                  }
-                  placeholder="Masalan: 6236820733"
-                  className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder:text-slate-400"
-                />
-                <p className="mt-1.5 text-xs text-slate-400">
-                  Asosiy advokat hisobi. (Qo'shimcha barcha advokatlarni yuqoridagi jadvaldan kiritishingiz mumkin).
-                </p>
-              </div>
-
-              {/* Admin Group */}
-              <div className="p-6">
-                <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                  👥 Birlamchi Admin Guruh ID
-                </label>
-                <input
-                  type="number"
-                  value={settings.admin_group_id || ""}
-                  onChange={(e) =>
-                    setSettings({
-                      ...settings,
-                      admin_group_id: e.target.value ? Number(e.target.value) : null,
-                    })
-                  }
-                  placeholder="Masalan: -1001234567890"
-                  className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder:text-slate-400"
-                />
-                <p className="mt-1.5 text-xs text-slate-400">
-                  Bot muhim xabarlar, to'lovlar va SOS lidlarini yuboradigan asosiy Telegram guruhi.
-                </p>
-              </div>
-
-              {/* Admin IDs */}
-              <div className="p-6">
-                <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                  🔑 Birlamchi Admin Telegram ID lari
-                </label>
-                <input
-                  type="text"
-                  value={settings.admin_telegram_ids || ""}
-                  onChange={(e) => setSettings({ ...settings, admin_telegram_ids: e.target.value })}
-                  placeholder="Masalan: 111111,222222,333333"
-                  className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder:text-slate-400"
-                />
-                <p className="mt-1.5 text-xs text-slate-400">
-                  Admin panelga kirish huquqiga ega asosiy Telegram ID lari ro'yxati.
-                </p>
-              </div>
+          {message && (
+            <div
+              className={`p-4 rounded-xl text-sm font-medium ${
+                message.type === "success"
+                  ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                  : "bg-red-50 text-red-800 border border-red-200"
+              }`}
+            >
+              {message.text}
             </div>
+          )}
 
-            <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex justify-end">
-              <button
-                type="submit"
-                disabled={saving}
-                className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                {saving ? "Saqlanmoqda..." : "Asosiy Sozlamalarni Saqlash"}
-              </button>
-            </div>
-          </form>
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <form onSubmit={handleSaveSettings}>
+              <div className="divide-y divide-slate-100">
+                {/* 1. Message Debounce Time (Highlighted at Top) */}
+                <div className="p-6 bg-gradient-to-r from-indigo-50/60 via-white to-white">
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <label className="block text-base font-bold text-slate-900">
+                        ⏱ Xabarlarni yig&apos;ish (Debounce) vaqti
+                      </label>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Mijoz bir nechta xabar yozganda ularni bitta savolga birlashtirish uchun kutish vaqti
+                      </p>
+                    </div>
+                    <span className="text-sm font-mono font-bold px-3 py-1 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200 shadow-xs">
+                      {settings.inquiry_debounce_seconds ?? 3.0} soniya
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-3 mt-3">
+                    <div className="relative">
+                      <input
+                        type="number"
+                        step="0.5"
+                        min="0.5"
+                        max="30"
+                        value={settings.inquiry_debounce_seconds ?? 3.0}
+                        onChange={(e) =>
+                          setSettings({
+                            ...settings,
+                            inquiry_debounce_seconds: e.target.value ? Number(e.target.value) : 3.0,
+                          })
+                        }
+                        className="w-36 px-4 py-2.5 pr-12 border-2 border-indigo-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder:text-slate-400 font-mono font-bold text-indigo-950 bg-white"
+                      />
+                      <span className="absolute right-3 top-2.5 text-xs font-semibold text-slate-400 pointer-events-none">
+                        sek
+                      </span>
+                    </div>
+
+                    <div className="flex flex-wrap gap-1.5">
+                      {[1, 2, 3, 4, 5, 8, 10].map((sec) => (
+                        <button
+                          key={sec}
+                          type="button"
+                          onClick={() =>
+                            setSettings({
+                              ...settings,
+                              inquiry_debounce_seconds: sec,
+                            })
+                          }
+                          className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
+                            (settings.inquiry_debounce_seconds ?? 3.0) === sec
+                              ? "bg-indigo-600 text-white border-indigo-600 shadow-xs scale-105"
+                              : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                          }`}
+                        >
+                          {sec}s
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="mt-3 p-3 bg-amber-50/80 border border-amber-200/80 rounded-xl text-xs text-amber-900 leading-relaxed">
+                    💡 <b>Qanday ishlaydi:</b> Mijoz Telegram&apos;da ketma-ket bir nechta xabar yozganda (masalan: <i>&quot;Salom yaxshimisiz&quot;</i>, so&apos;ng <i>&quot;Menda meros bo&apos;yicha savol bor edi&quot;</i>), bot har biriga alohida-alohida javob qaytarmaydi. Belgilangan soniya ichida barcha xabarlar bitta to&apos;liq savol sifatida yig&apos;iladi va AI yuristga yuboriladi.
+                  </div>
+                </div>
+
+                {/* 2. Lawyer ID */}
+                <div className="p-6">
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                    👨‍⚖️ Birlamchi Advokat Telegram ID
+                  </label>
+                  <input
+                    type="number"
+                    value={settings.lawyer_telegram_id || ""}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        lawyer_telegram_id: e.target.value ? Number(e.target.value) : null,
+                      })
+                    }
+                    placeholder="Masalan: 6236820733"
+                    className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder:text-slate-400"
+                  />
+                  <p className="mt-1.5 text-xs text-slate-400">
+                    Asosiy advokat hisobi. (Qo&apos;shimcha advokatlarni &quot;Rollar va Ruxsatlar&quot; bo&apos;limidan kiritishingiz mumkin).
+                  </p>
+                </div>
+
+                {/* 3. Admin Group */}
+                <div className="p-6">
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                    👥 Birlamchi Admin Guruh ID
+                  </label>
+                  <input
+                    type="number"
+                    value={settings.admin_group_id || ""}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        admin_group_id: e.target.value ? Number(e.target.value) : null,
+                      })
+                    }
+                    placeholder="Masalan: -1001234567890"
+                    className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder:text-slate-400"
+                  />
+                  <p className="mt-1.5 text-xs text-slate-400">
+                    Bot muhim xabarlar, to&apos;lovlar va SOS lidlarini yuboradigan asosiy Telegram guruhi.
+                  </p>
+                </div>
+
+                {/* 4. Admin IDs */}
+                <div className="p-6">
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                    🔑 Birlamchi Admin Telegram ID lari
+                  </label>
+                  <input
+                    type="text"
+                    value={settings.admin_telegram_ids || ""}
+                    onChange={(e) => setSettings({ ...settings, admin_telegram_ids: e.target.value })}
+                    placeholder="Masalan: 111111,222222,333333"
+                    className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder:text-slate-400"
+                  />
+                  <p className="mt-1.5 text-xs text-slate-400">
+                    Admin panelga kirish huquqiga ega asosiy Telegram ID lari ro&apos;yxati.
+                  </p>
+                </div>
+              </div>
+
+              <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex justify-end">
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm cursor-pointer"
+                >
+                  {saving ? "Saqlanmoqda..." : "Bot Sozlamalarini Saqlash"}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* 4. AI Prompts Settings */}
-      <div className="space-y-6 pt-6 border-t border-slate-200">
+      {activeSection === "prompts" && (
+        <div className="space-y-6 pt-2">
         <div>
           <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
             <span>🧠</span> AI Advokat Ko'rsatmalari (Prompts)
@@ -694,6 +812,7 @@ export default function SettingsPage() {
           </form>
         </div>
       </div>
+      )}
 
       {/* 5. Add / Edit Access Modal */}
       {showAccessModal && (

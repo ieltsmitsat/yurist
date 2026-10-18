@@ -1,6 +1,5 @@
-"""Inquiry processing service (Text, Voice, Document Express Audits)."""
-
 import logging
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -13,6 +12,7 @@ from app.services.ai.document import DocumentParser
 from app.services.ai.llm_client import LegalAnalysisResult, LLMService
 from app.services.ai.rag import RAGService
 from app.services.ai.speech import SpeechService
+from app.services.chat_service import ChatService
 from app.services.user_service import UserService
 
 logger = logging.getLogger(__name__)
@@ -36,16 +36,27 @@ class InquiryService:
         session: AsyncSession,
         user: User,
         question_text: str,
+        exclude_message_ids: Sequence[int] | None = None,
     ) -> tuple[Inquiry, LegalAnalysisResult]:
         """Process a text inquiry from the user."""
         # Retrieve relevant legal context from pgvector RAG
         rag_context = await self.rag.search_relevant_laws(question_text, session=session, limit=3)
 
-        # Generate legal response with Undetectable AI Persona
+        # Retrieve recent conversation history for memory across sessions & days
+        history_context = await ChatService.get_recent_history_context(
+            session=session,
+            user_id=user.id,
+            limit=10,
+            exclude_message_ids=exclude_message_ids,
+            language=user.language,
+        )
+
+        # Generate legal response with Undetectable AI Persona and conversation history
         analysis = await self.llm.analyze_legal_inquiry(
             question=question_text,
             language=user.language,
             rag_context=rag_context,
+            conversation_history=history_context,
         )
 
         # Decrement free question credit only for genuine legal inquiries

@@ -155,9 +155,12 @@ class UserService:
     @classmethod
     def is_lawyer(cls, user: User) -> bool:
         """Check if user is a designated lawyer / administrator."""
+        free_q = getattr(user, "free_questions_left", 0)
+        has_infinite = isinstance(free_q, int) and free_q >= 999999
+        is_sub = getattr(user, "is_subscribed", False) is True
         return bool(
             user.lead_status == "lawyer"
-            or (user.is_subscribed and user.free_questions_left >= 999999)
+            or (is_sub and has_infinite)
             or (settings.LAWYER_TELEGRAM_ID and user.telegram_id == settings.LAWYER_TELEGRAM_ID)
         )
 

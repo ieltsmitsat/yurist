@@ -69,6 +69,7 @@ class Settings(BaseSettings):
     FREE_QUESTIONS_LIMIT: int = 3
     BUSINESS_TAKEOVER_PAUSE_SECONDS: int = 1800  # 30 minutes
     REFERRAL_BONUS_QUESTIONS: int = 1
+    INQUIRY_DEBOUNCE_SECONDS: float = 3.0  # seconds to aggregate consecutive messages
 
 
 settings = Settings()
