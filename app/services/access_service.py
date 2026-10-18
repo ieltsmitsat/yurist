@@ -97,6 +97,31 @@ class AccessService:
         return res.scalar_one_or_none()
 
     @classmethod
+    async def get_topic_destinations(
+        cls, session: AsyncSession, topic_type: str
+    ) -> list[tuple[int, int]]:
+        """Return list of (group_telegram_id, thread_id) for active groups with configured topic.
+
+        topic_type can be 'lead', 'contact', or 'payment'.
+        """
+        if topic_type == "lead":
+            col = SystemAccess.lead_topic_id
+        elif topic_type == "contact":
+            col = SystemAccess.contact_topic_id
+        elif topic_type == "payment":
+            col = SystemAccess.payment_topic_id
+        else:
+            return []
+
+        stmt = select(SystemAccess.telegram_id, col).where(
+            SystemAccess.role == "group",
+            SystemAccess.is_active.is_(True),
+            col.is_not(None),
+        )
+        res = await session.execute(stmt)
+        return [(row[0], int(row[1])) for row in res.all() if row[1] is not None]
+
+    @classmethod
     async def create(
         cls,
         session: AsyncSession,
@@ -105,6 +130,9 @@ class AccessService:
         role: str = "lawyer",
         description: str | None = None,
         is_active: bool = True,
+        lead_topic_id: int | None = None,
+        contact_topic_id: int | None = None,
+        payment_topic_id: int | None = None,
     ) -> SystemAccess:
         """Create new system access record."""
         existing = await cls.get_by_telegram_id(session, telegram_id)
@@ -117,6 +145,9 @@ class AccessService:
             name=name,
             description=description,
             is_active=is_active,
+            lead_topic_id=lead_topic_id,
+            contact_topic_id=contact_topic_id,
+            payment_topic_id=payment_topic_id,
         )
         session.add(access)
         await session.commit()
@@ -159,7 +190,7 @@ class AccessService:
         old_tg_id = access.telegram_id
 
         for key, value in fields.items():
-            if hasattr(access, key) and value is not None:
+            if hasattr(access, key):
                 setattr(access, key, value)
 
         await session.commit()

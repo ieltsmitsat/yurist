@@ -283,6 +283,9 @@ export interface SystemAccessItem {
   description: string | null;
   is_active: boolean;
   created_at?: string;
+  lead_topic_id?: number | null;
+  contact_topic_id?: number | null;
+  payment_topic_id?: number | null;
 }
 
 export const getSystemAccessList = (role?: string) =>
@@ -294,6 +297,9 @@ export const createSystemAccess = (data: {
   name: string;
   description?: string | null;
   is_active?: boolean;
+  lead_topic_id?: number | null;
+  contact_topic_id?: number | null;
+  payment_topic_id?: number | null;
 }) =>
   fetchApi<SystemAccessItem>("/settings/access", {
     method: "POST",

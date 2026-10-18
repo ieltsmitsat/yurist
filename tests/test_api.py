@@ -412,10 +412,17 @@ async def test_system_access_crud_api():
                 "name": "Lidlar guruhi",
                 "description": "Yangi arizalar guruhi",
                 "is_active": True,
+                "lead_topic_id": 12,
+                "contact_topic_id": 14,
+                "payment_topic_id": 16,
             },
         )
         assert res_group.status_code == 201
-        assert res_group.json()["role"] == "group"
+        group_data = res_group.json()
+        assert group_data["role"] == "group"
+        assert group_data["lead_topic_id"] == 12
+        assert group_data["contact_topic_id"] == 14
+        assert group_data["payment_topic_id"] == 16
 
         # 3. List all access entries
         res_list = await client.get("/api/v1/settings/access")

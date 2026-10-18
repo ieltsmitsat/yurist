@@ -278,6 +278,19 @@ async def process_aggregated_inquiry(
             if analysis.is_legal_case and analysis.risk_level == "high":
                 await _notify_admin_high_risk(bot, fresh_user, combined_text, analysis.risk_score)
 
+            # 7. Notify supergroup forum topics for new lead
+            from app.services.group_notification_service import GroupNotificationService
+
+            if fresh_user.lead_status in ("verified_lead", "new"):
+                await GroupNotificationService.notify_new_lead(
+                    bot=bot,
+                    session=session,
+                    user=fresh_user,
+                    purpose=combined_text,
+                )
+                fresh_user.lead_status = "lead_notified"
+                await session.commit()
+
         except Exception as e:  # noqa: BLE001
             logger.error("Error handling aggregated inquiry for user #%d: %s", fresh_user.id, e)
             err_msg = t("error_text_inquiry", lang)
@@ -417,6 +430,19 @@ async def handle_voice_inquiry(
                 bot, user, inquiry.stt_transcript or "Ovozli murojaat", analysis.risk_score
             )
 
+        # Notify supergroup forum topics for new lead
+        if user.lead_status in ("verified_lead", "new"):
+            from app.services.group_notification_service import GroupNotificationService
+
+            await GroupNotificationService.notify_new_lead(
+                bot=bot,
+                session=session,
+                user=user,
+                purpose=inquiry.stt_transcript or "Ovozli murojaat",
+            )
+            user.lead_status = "lead_notified"
+            await session.commit()
+
     except Exception as e:  # noqa: BLE001
         logger.error("Error processing voice inquiry: %s", e)
         err_msg = t("error_voice_inquiry", lang)
@@ -436,8 +462,77 @@ async def handle_voice_inquiry(
 @router.message(F.photo)
 async def handle_photo_receipt(
     message: Message,
+    session: AsyncSession,
+    bot: Bot,
     user: User | None = None,
 ) -> None:
-    """Handle photo uploads (usually payment receipts)."""
+    """Handle photo uploads (usually payment receipts) and dispatch to payment and contact topics."""
+    if not message.photo or not user:
+        return
+
     lang = user.language if user else "uz"
+    photo_file_id = message.photo[-1].file_id
+
+    from app.db.models.inquiry import Inquiry
+    from app.db.models.transaction import Transaction
+    from app.services.group_notification_service import GroupNotificationService
+
+    # 1. Fetch latest pending or completed transaction for context
+    stmt_tx = (
+        select(Transaction)
+        .where(Transaction.user_id == user.id)
+        .order_by(Transaction.id.desc())
+        .limit(1)
+    )
+    res_tx = await session.execute(stmt_tx)
+    latest_tx = res_tx.scalar_one_or_none()
+
+    # 2. Fetch latest user inquiry for problem context
+    stmt_inq = (
+        select(Inquiry)
+        .where(Inquiry.user_id == user.id)
+        .order_by(Inquiry.id.desc())
+        .limit(1)
+    )
+    res_inq = await session.execute(stmt_inq)
+    latest_inq = res_inq.scalar_one_or_none()
+
+    problem_snippet = ""
+    if latest_inq and latest_inq.question_text:
+        problem_snippet = latest_inq.question_text
+    elif latest_tx:
+        problem_snippet = f"Tranzaksiya #{latest_tx.id}"
+
+    service_title = "Yuridik xizmat / Konsultatsiya"
+    if latest_tx:
+        service_title = f"Xizmat to'lovi (#{latest_tx.id})"
+
+    # 3. Dispatch to group forum topics
+    await GroupNotificationService.notify_payment_receipt(
+        bot=bot,
+        session=session,
+        user=user,
+        photo_file_id=photo_file_id,
+        problem_summary=problem_snippet,
+        tx_id=latest_tx.id if latest_tx else None,
+    )
+
+    await GroupNotificationService.notify_contact_request(
+        bot=bot,
+        session=session,
+        user=user,
+        service_title=service_title,
+        problem_summary=problem_snippet,
+    )
+
+    # 4. Acknowledge receipt to user
     await message.answer(t("photo_receipt", lang))
+    await ChatService.log_message(
+        session=session,
+        user_id=user.id,
+        telegram_id=user.telegram_id,
+        sender_type="user",
+        text="[To'lov cheki skrinshoti yuklandi]",
+        message_type="photo",
+        telegram_message_id=message.message_id,
+    )

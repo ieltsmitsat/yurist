@@ -90,6 +90,9 @@ class SystemAccessResponse(BaseModel):
     description: str | None = None
     is_active: bool
     created_at: Any = None
+    lead_topic_id: int | None = None
+    contact_topic_id: int | None = None
+    payment_topic_id: int | None = None
 
 
 class SystemAccessCreate(BaseModel):
@@ -98,6 +101,9 @@ class SystemAccessCreate(BaseModel):
     name: str
     description: str | None = None
     is_active: bool = True
+    lead_topic_id: int | None = None
+    contact_topic_id: int | None = None
+    payment_topic_id: int | None = None
 
 
 class SystemAccessUpdate(BaseModel):
@@ -106,6 +112,9 @@ class SystemAccessUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
     is_active: bool | None = None
+    lead_topic_id: int | None = None
+    contact_topic_id: int | None = None
+    payment_topic_id: int | None = None
 
 
 @router.get("/access", response_model=list[SystemAccessResponse])
@@ -131,6 +140,9 @@ async def create_system_access(
             name=payload.name,
             description=payload.description,
             is_active=payload.is_active,
+            lead_topic_id=payload.lead_topic_id,
+            contact_topic_id=payload.contact_topic_id,
+            payment_topic_id=payload.payment_topic_id,
         )
     except ValueError as val_err:
         raise HTTPException(

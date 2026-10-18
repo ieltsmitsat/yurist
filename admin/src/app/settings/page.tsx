@@ -35,6 +35,9 @@ export default function SettingsPage() {
     name: "",
     description: "",
     is_active: true,
+    lead_topic_id: null as number | null,
+    contact_topic_id: null as number | null,
+    payment_topic_id: null as number | null,
   });
 
   // Global Bot Settings State
@@ -105,6 +108,9 @@ export default function SettingsPage() {
       name: "",
       description: "",
       is_active: true,
+      lead_topic_id: null,
+      contact_topic_id: null,
+      payment_topic_id: null,
     });
     setShowAccessModal(true);
   };
@@ -118,6 +124,9 @@ export default function SettingsPage() {
       name: item.name,
       description: item.description || "",
       is_active: item.is_active,
+      lead_topic_id: item.lead_topic_id ?? null,
+      contact_topic_id: item.contact_topic_id ?? null,
+      payment_topic_id: item.payment_topic_id ?? null,
     });
     setShowAccessModal(true);
   };
@@ -141,6 +150,11 @@ export default function SettingsPage() {
     }
 
     try {
+      const isGroup = accessForm.role === "group";
+      const leadTopic = isGroup ? accessForm.lead_topic_id : null;
+      const contactTopic = isGroup ? accessForm.contact_topic_id : null;
+      const paymentTopic = isGroup ? accessForm.payment_topic_id : null;
+
       if (editingAccess) {
         const updated = await updateSystemAccess(editingAccess.id, {
           telegram_id: tgId,
@@ -148,6 +162,9 @@ export default function SettingsPage() {
           name: accessForm.name.trim(),
           description: accessForm.description.trim() || null,
           is_active: accessForm.is_active,
+          lead_topic_id: leadTopic,
+          contact_topic_id: contactTopic,
+          payment_topic_id: paymentTopic,
         });
         setAccessList((prev) => prev.map((item) => (item.id === editingAccess.id ? updated : item)));
       } else {
@@ -157,6 +174,9 @@ export default function SettingsPage() {
           name: accessForm.name.trim(),
           description: accessForm.description.trim() || null,
           is_active: accessForm.is_active,
+          lead_topic_id: leadTopic,
+          contact_topic_id: contactTopic,
+          payment_topic_id: paymentTopic,
         });
         setAccessList((prev) => [...prev, created]);
       }
@@ -440,7 +460,33 @@ export default function SettingsPage() {
                     <tr key={item.id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-4 py-3.5 font-mono text-slate-400 text-xs">#{item.id}</td>
                       <td className="px-4 py-3.5">{getRoleBadge(item.role)}</td>
-                      <td className="px-4 py-3.5 font-semibold text-slate-900">{item.name}</td>
+                      <td className="px-4 py-3.5">
+                        <div className="font-semibold text-slate-900">{item.name}</div>
+                        {item.role === "group" && (
+                          <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                            {item.lead_topic_id && (
+                              <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md font-mono font-bold bg-emerald-50 text-emerald-800 border border-emerald-200" title="Leadlar Topiki">
+                                📌 Lead: #{item.lead_topic_id}
+                              </span>
+                            )}
+                            {item.contact_topic_id && (
+                              <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md font-mono font-bold bg-blue-50 text-blue-800 border border-blue-200" title="Aloqa Topiki">
+                                📞 Aloqa: #{item.contact_topic_id}
+                              </span>
+                            )}
+                            {item.payment_topic_id && (
+                              <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md font-mono font-bold bg-purple-50 text-purple-800 border border-purple-200" title="To'lovlar Topiki">
+                                💳 To&apos;lov: #{item.payment_topic_id}
+                              </span>
+                            )}
+                            {!item.lead_topic_id && !item.contact_topic_id && !item.payment_topic_id && (
+                              <span className="text-[10px] text-slate-400 italic">
+                                Topiklar sozlanmagan
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </td>
                       <td className="px-4 py-3.5 font-mono text-xs text-slate-700 bg-slate-50/70 rounded-md">
                         {item.telegram_id}
                       </td>
@@ -519,8 +565,32 @@ export default function SettingsPage() {
                   <div>
                     <h3 className="font-semibold text-slate-900 text-sm">{item.name}</h3>
                     <p className="text-xs font-mono text-slate-500 mt-0.5">ID: {item.telegram_id}</p>
+                    {item.role === "group" && (
+                      <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                        {item.lead_topic_id && (
+                          <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md font-mono font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                            📌 Lead: #{item.lead_topic_id}
+                          </span>
+                        )}
+                        {item.contact_topic_id && (
+                          <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md font-mono font-bold bg-blue-50 text-blue-800 border border-blue-200">
+                            📞 Aloqa: #{item.contact_topic_id}
+                          </span>
+                        )}
+                        {item.payment_topic_id && (
+                          <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md font-mono font-bold bg-purple-50 text-purple-800 border border-purple-200">
+                            💳 To&apos;lov: #{item.payment_topic_id}
+                          </span>
+                        )}
+                        {!item.lead_topic_id && !item.contact_topic_id && !item.payment_topic_id && (
+                          <span className="text-[10px] text-slate-400 italic">
+                            Topiklar sozlanmagan
+                          </span>
+                        )}
+                      </div>
+                    )}
                     {item.description && (
-                      <p className="text-xs text-slate-500 mt-1 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                      <p className="text-xs text-slate-500 mt-1.5 bg-slate-50 p-2 rounded-lg border border-slate-100">
                         {item.description}
                       </p>
                     )}
@@ -904,6 +974,96 @@ export default function SettingsPage() {
                   className="w-full px-3.5 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder:text-slate-400"
                 />
               </div>
+
+              {/* Forum Supergroup Topics Configuration (when role is group) */}
+              {accessForm.role === "group" && (
+                <div className="p-4 bg-indigo-50/60 rounded-xl border border-indigo-200/80 space-y-3.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">💬</span>
+                    <div>
+                      <h4 className="text-xs font-bold text-indigo-950 uppercase tracking-wider">
+                        Telegram Forum Topiklari (Thread ID)
+                      </h4>
+                      <p className="text-[11px] text-indigo-700/80 mt-0.5">
+                        Xabarlarni guruhning maxsus mavzulariga (topiklariga) avtomatik yo&apos;naltirish.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 pt-1">
+                    {/* Lead Topic ID */}
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-800 mb-1 flex items-center gap-1.5">
+                        <span>📌</span> Leadlar Topik ID:
+                      </label>
+                      <input
+                        type="number"
+                        value={accessForm.lead_topic_id || ""}
+                        onChange={(e) =>
+                          setAccessForm({
+                            ...accessForm,
+                            lead_topic_id: e.target.value ? Number(e.target.value) : null,
+                          })
+                        }
+                        placeholder="Masalan: 12 (bo'sh qolsa yuborilmaydi)"
+                        className="w-full px-3 py-2 text-xs font-mono border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 placeholder:text-slate-400"
+                      />
+                      <p className="text-[10px] text-slate-500 mt-0.5">
+                        Botdan ro&apos;yxatdan o&apos;tgan mijozlar (Ism, telefon, yozishdan maqsadi)
+                      </p>
+                    </div>
+
+                    {/* Contact Topic ID */}
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-800 mb-1 flex items-center gap-1.5">
+                        <span>📞</span> Aloqa Topik ID:
+                      </label>
+                      <input
+                        type="number"
+                        value={accessForm.contact_topic_id || ""}
+                        onChange={(e) =>
+                          setAccessForm({
+                            ...accessForm,
+                            contact_topic_id: e.target.value ? Number(e.target.value) : null,
+                          })
+                        }
+                        placeholder="Masalan: 14 (bo'sh qolsa yuborilmaydi)"
+                        className="w-full px-3 py-2 text-xs font-mono border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 placeholder:text-slate-400"
+                      />
+                      <p className="text-[10px] text-slate-500 mt-0.5">
+                        To&apos;lov qilgan mijozlar bilan advokat tezkor bog&apos;lanishi uchun (Ism, telefon, xizmat turi, muammo)
+                      </p>
+                    </div>
+
+                    {/* Payment Topic ID */}
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-800 mb-1 flex items-center gap-1.5">
+                        <span>💳</span> To&apos;lovlar Topik ID:
+                      </label>
+                      <input
+                        type="number"
+                        value={accessForm.payment_topic_id || ""}
+                        onChange={(e) =>
+                          setAccessForm({
+                            ...accessForm,
+                            payment_topic_id: e.target.value ? Number(e.target.value) : null,
+                          })
+                        }
+                        placeholder="Masalan: 16 (bo'sh qolsa yuborilmaydi)"
+                        className="w-full px-3 py-2 text-xs font-mono border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 placeholder:text-slate-400"
+                      />
+                      <p className="text-[10px] text-slate-500 mt-0.5">
+                        Mijoz to&apos;lov chekini yuborganda skrinshot/chek rasmi va to&apos;lov rekvizitlari
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="p-2.5 bg-amber-50/90 border border-amber-200/90 rounded-lg text-[11px] text-amber-900 leading-snug">
+                    💡 <b>Topik ID sini qanday olish mumkin:</b> Telegram guruhdagi kerakli topik ustiga o&apos;ng tugmani bosib <b>«Copy Link»</b> qiling. Havola oxiridagi raqam (masalan: <code>t.me/c/1234567890/<b>45</b></code>) — topik ID si bo&apos;ladi. Agar topik ID kiritilmasa, ushbu turdagi xabarlar guruhga yuborilmaydi.
+                  </div>
+                </div>
+              )}
+
 
               {/* Active Toggle */}
               <div className="flex items-center gap-2 pt-1">

@@ -34,9 +34,17 @@ async def init_database() -> None:
     """Create tables and seed legal knowledge base if empty."""
     logger.info("Initializing database tables...")
     async with engine.begin() as conn:
-        if "postgres" in settings.DATABASE_URL:
-            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         await conn.run_sync(Base.metadata.create_all)
+
+        # Ensure topic columns exist on system_access table in existing deployments
+        for col in ["lead_topic_id", "contact_topic_id", "payment_topic_id"]:
+            try:
+                if "postgres" in settings.DATABASE_URL:
+                    await conn.execute(text(f"ALTER TABLE system_access ADD COLUMN IF NOT EXISTS {col} BIGINT"))
+                else:
+                    await conn.execute(text(f"ALTER TABLE system_access ADD COLUMN {col} BIGINT"))
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("Column %s check or migration note: %s", col, exc)
 
     # Seed if legal chunks empty
     async with AsyncSessionLocal() as session:

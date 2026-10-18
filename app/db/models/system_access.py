@@ -24,3 +24,8 @@ class SystemAccess(Base, TimestampMixin):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    # Forum Supergroup Topic IDs (message_thread_id) for role="group"
+    lead_topic_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    contact_topic_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    payment_topic_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
