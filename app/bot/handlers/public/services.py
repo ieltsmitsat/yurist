@@ -45,7 +45,37 @@ def format_service_details_text(service_title: str, service_desc: str | None, pr
     )
 
 
-@router.message(F.text.in_(["💼 Xizmatlar va Narxlar", "💼 Услуги и Цены"]))
+def is_services_menu_text_trigger(message: Message) -> bool:
+    """Detect if client is requesting services catalog via button or text."""
+    if not message.text:
+        return False
+    t = message.text.strip().lower()
+    if t in ["💼 xizmatlar va narxlar", "💼 услуги и цены"]:
+        return True
+    service_phrases = [
+        "xizmatlardan foydalan",
+        "xizmatdan foydalan",
+        "qanday xizmatlar",
+        "qanaqa xizmatlar",
+        "xizmatlar haqida",
+        "xizmatlaringiz haqida",
+        "xizmatlaringiz qanday",
+        "xizmatlar ro'yxati",
+        "xizmatlar royxati",
+        "mavjud xizmatlar",
+        "xizmatlar narxi",
+        "xizmatlar narxlari",
+        "barcha xizmatlar",
+        "какие услуги",
+        "список услуг",
+        "тарифы",
+        "стоимость услуг",
+        "хочу воспользоваться услугой",
+    ]
+    return any(p in t for p in service_phrases)
+
+
+@router.message(is_services_menu_text_trigger)
 async def handle_services_menu(
     message: Message, session: AsyncSession, user: User | None = None
 ) -> None:

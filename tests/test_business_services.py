@@ -387,3 +387,74 @@ async def test_org_settings_and_business_helpers():
     assert is_service_payment_intent("Bugun ob-havo qanday?") is False
 
 
+@pytest.mark.asyncio
+async def test_business_chat_services_catalog_and_selection():
+    """Test general service inquiry detection, catalog generation, and service selection."""
+    from app.bot.handlers.business.messages import (
+        detect_service_selection,
+        format_services_catalog_text,
+        is_general_services_inquiry,
+    )
+    from app.db.models.service import Service
+
+    # Test inquiries
+    assert is_general_services_inquiry("Qanday xizmatlar bor?") is True
+    assert is_general_services_inquiry("Assalomu alaykum xizmatlardan foydalanmoqchiman") is True
+    assert is_general_services_inquiry("Xizmatlaringiz haqida ma'lumot bering") is True
+    assert is_general_services_inquiry("Xizmatlar ro'yxatini tashlang") is True
+    assert is_general_services_inquiry("Xizmatlar narxlari qanday?") is True
+    assert is_general_services_inquiry("Biznesimda soliq tekshiruvi boshlandi") is False
+
+    # Create dummy service sequence
+    s1 = Service(
+        id=1,
+        title_uz="Shaxsiy konsultatsiya",
+        title_ru="Консультация",
+        description_uz="24 soat ichida to'liq tahlil",
+        price=Decimal("150000.00"),
+        service_type="consultation",
+        is_active=True,
+    )
+    s2 = Service(
+        id=2,
+        title_uz="Shartnoma auditi",
+        title_ru="Аудит договора",
+        description_uz="Xatarlarni tekshirish",
+        price=Decimal("300000.00"),
+        service_type="audit",
+        is_active=True,
+    )
+    s3 = Service(
+        id=3,
+        title_uz="Da'vo arizasi tuzish",
+        title_ru="Исковое заявление",
+        description_uz="Sud arizasi",
+        price=Decimal("500000.00"),
+        service_type="claim",
+        is_active=True,
+    )
+    services = [s1, s2, s3]
+
+    # Test catalog text formatting
+    catalog_uz = format_services_catalog_text(services, lang="uz")
+    assert "Bizning professional yuridik xizmatlarimiz" in catalog_uz
+    assert "1. Shaxsiy konsultatsiya" in catalog_uz
+    assert "150 000 so'm" in catalog_uz
+    assert "2. Shartnoma auditi" in catalog_uz
+    assert "300 000 so'm" in catalog_uz
+    assert "3. Da'vo arizasi tuzish" in catalog_uz
+    assert "500 000 so'm" in catalog_uz
+
+    # Test selection by number (with is_awaiting=True)
+    assert detect_service_selection("1", services, is_awaiting=True) == s1
+    assert detect_service_selection("2", services, is_awaiting=True) == s2
+    assert detect_service_selection("3-xizmat", services, is_awaiting=True) == s3
+    assert detect_service_selection("ikkinchisi", services, is_awaiting=True) == s2
+
+    # Test selection by keyword
+    assert detect_service_selection("Menga shartnoma tekshirish kerak", services) == s2
+    assert detect_service_selection("Sudga da'vo arizasi bermoqchiman", services) == s3
+    assert detect_service_selection("Oddiy salom", services) is None
+
+
+
