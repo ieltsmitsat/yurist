@@ -1,9 +1,11 @@
 """Services catalog and payment ledger handlers (Off-limits rule safe)."""
 
 import logging
+from typing import Any
 
 from aiogram import Bot, F, Router
 from aiogram.types import CallbackQuery, Message
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.keyboards.keyboards import payment_methods_kb, services_catalog_kb
@@ -158,12 +160,13 @@ async def handle_p2p_payment(
     if not service:
         return
 
-    # Create pending transaction in ledger
+    # Create pending transaction in ledger with service title reference
     tx = await PaymentService.create_transaction(
         session=session,
         user=user,
         amount=service.price,
         payment_method="p2p_card",
+        transaction_ref=service.title_uz,
     )
 
     lang = user.language
@@ -229,6 +232,7 @@ async def handle_stars_payment(
         user=user,
         amount=service.price,
         payment_method="stars",
+        transaction_ref=service.title_uz,
     )
 
     lang = user.language
@@ -291,3 +295,143 @@ async def handle_contact_lawyer(callback: CallbackQuery, user: User | None = Non
     await callback.answer()
     if isinstance(callback.message, Message):
         await callback.message.answer(text)
+
+
+@router.callback_query(F.data.startswith("pay_ok:"))
+async def handle_payment_approval(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    bot: Bot,
+) -> None:
+    """Handle lawyer/admin approving payment from the payment topic."""
+    if not callback.data:
+        return
+
+    admin_name = callback.from_user.full_name if callback.from_user else "Admin"
+    raw_payload = callback.data.split("pay_ok:")[1]  # tx_123 or u_456
+
+    target_user: User | None = None
+    target_tx: Any = None
+
+    if raw_payload.startswith("tx_"):
+        tx_id_str = raw_payload[3:]
+        if tx_id_str.isdigit():
+            tx_id = int(tx_id_str)
+            target_tx = await PaymentService.confirm_payment(
+                session=session,
+                transaction_id=tx_id,
+                transaction_ref=f"Approved by {admin_name}",
+            )
+            if target_tx:
+                stmt_u = select(User).where(User.id == target_tx.user_id)
+                res_u = await session.execute(stmt_u)
+                target_user = res_u.scalar_one_or_none()
+    elif raw_payload.startswith("u_"):
+        user_id_str = raw_payload[2:]
+        if user_id_str.isdigit():
+            stmt_u = select(User).where(User.id == int(user_id_str))
+            res_u = await session.execute(stmt_u)
+            target_user = res_u.scalar_one_or_none()
+
+    # 1. Notify client in private bot chat
+    if target_user and target_user.telegram_id:
+        user_lang = target_user.language or "uz"
+        client_msg = (
+            "✅ <b>To'lovingiz muvaffaqiyatli tasdiqlandi!</b>\n\n"
+            "To'lov qabul qilindi. Tez orada mas'ul huquqshunosimiz siz bilan bog'lanib, xizmat ko'rsatishni boshlaydi."
+            if user_lang == "uz"
+            else "✅ <b>Ваш платеж успешно подтвержден!</b>\n\n"
+            "Оплата принята. В ближайшее время юрист свяжется с вами для оказания услуги."
+        )
+        try:
+            await bot.send_message(chat_id=target_user.telegram_id, text=client_msg)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Could not send payment confirmation to user %s: %s", target_user.telegram_id, e)
+
+    # 2. Update message in group topic (remove buttons and show confirmed badge)
+    await callback.answer("To'lov tasdiqlandi! Mijozga xabar yuborildi.", show_alert=True)
+    if isinstance(callback.message, Message):
+        status_note = f"\n\n✅ <b>TO'LOV TASDIQLANDI</b> (Mas'ul: {admin_name})\n<i>Mijozga tasdiqnoma yetkazildi.</i>"
+        if callback.message.caption:
+            await callback.message.edit_caption(
+                caption=callback.message.caption + status_note,
+                reply_markup=None,
+            )
+        elif callback.message.text:
+            await callback.message.edit_text(
+                text=callback.message.text + status_note,
+                reply_markup=None,
+            )
+
+
+@router.callback_query(F.data.startswith("pay_cancel:"))
+async def handle_payment_rejection(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    bot: Bot,
+) -> None:
+    """Handle lawyer/admin rejecting payment from the payment topic."""
+    if not callback.data:
+        return
+
+    admin_name = callback.from_user.full_name if callback.from_user else "Admin"
+    raw_payload = callback.data.split("pay_cancel:")[1]  # tx_123 or u_456
+
+    target_user: User | None = None
+    target_tx: Any = None
+
+    if raw_payload.startswith("tx_"):
+        tx_id_str = raw_payload[3:]
+        if tx_id_str.isdigit():
+            from app.db.models.transaction import Transaction
+            tx_id = int(tx_id_str)
+            stmt = select(Transaction).where(Transaction.id == tx_id)
+            res = await session.execute(stmt)
+            target_tx = res.scalar_one_or_none()
+            if target_tx:
+                target_tx.payment_status = "failed"
+                await session.commit()
+                stmt_u = select(User).where(User.id == target_tx.user_id)
+                res_u = await session.execute(stmt_u)
+                target_user = res_u.scalar_one_or_none()
+    elif raw_payload.startswith("u_"):
+        user_id_str = raw_payload[2:]
+        if user_id_str.isdigit():
+            stmt_u = select(User).where(User.id == int(user_id_str))
+            res_u = await session.execute(stmt_u)
+            target_user = res_u.scalar_one_or_none()
+
+    # 1. Notify client in private bot chat about issue
+    if target_user and target_user.telegram_id:
+        user_lang = target_user.language or "uz"
+        client_msg = (
+            "⚠️ <b>To'lovni tekshirishda muammo yuzaga keldi</b>\n\n"
+            "Siz yuborgan to'lov cheki yoki ma'lumotlarida noaniqlik aniqlandi va to'lov tasdiqlanmadi.\n\n"
+            "Iltimos, to'lov muvaffaqiyatli o'tganligini tekshirib, chek skrinshotini qaytadan yuboring "
+            "yoki yordam uchun huquqshunos bilan bog'laning."
+            if user_lang == "uz"
+            else "⚠️ <b>Возникла проблема при проверке платежа</b>\n\n"
+            "В отправленном чеке или реквизитах обнаружена неточность, платеж не подтвержден.\n\n"
+            "Пожалуйста, проверьте списание средств и отправьте квитанцию повторно "
+            "либо свяжитесь с юристом."
+        )
+        try:
+            await bot.send_message(chat_id=target_user.telegram_id, text=client_msg)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Could not send payment rejection to user %s: %s", target_user.telegram_id, e)
+
+    # 2. Update message in group topic (remove buttons and show rejected badge)
+    await callback.answer("To'lov bekor qilindi. Mijozga xabar yetkazildi.", show_alert=True)
+    if isinstance(callback.message, Message):
+        status_note = f"\n\n❌ <b>TO'LOV BEKOR QILINDI</b> (Mas'ul: {admin_name})\n<i>Mijozga qayta urinish bo'yicha xabar yuborildi.</i>"
+        if callback.message.caption:
+            await callback.message.edit_caption(
+                caption=callback.message.caption + status_note,
+                reply_markup=None,
+            )
+        elif callback.message.text:
+            await callback.message.edit_text(
+                text=callback.message.text + status_note,
+                reply_markup=None,
+            )
+

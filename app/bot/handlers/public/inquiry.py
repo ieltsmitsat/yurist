@@ -520,11 +520,15 @@ async def handle_photo_receipt(
     problem_snippet = ""
     if latest_inq and latest_inq.question_text:
         problem_snippet = latest_inq.question_text
+    elif latest_tx and latest_tx.transaction_ref:
+        problem_snippet = f"Xizmat buyurtmasi: {latest_tx.transaction_ref}"
     elif latest_tx:
         problem_snippet = f"Tranzaksiya #{latest_tx.id}"
 
     service_title = "Yuridik xizmat / Konsultatsiya"
-    if latest_tx:
+    if latest_tx and latest_tx.transaction_ref:
+        service_title = latest_tx.transaction_ref
+    elif latest_tx:
         service_title = f"Xizmat to'lovi (#{latest_tx.id})"
 
     # 3. Dispatch to group forum topics
@@ -533,6 +537,7 @@ async def handle_photo_receipt(
         session=session,
         user=user,
         photo_file_id=photo_file_id,
+        service_title=service_title,
         problem_summary=problem_snippet,
         tx_id=latest_tx.id if latest_tx else None,
     )

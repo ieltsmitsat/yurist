@@ -165,10 +165,13 @@ export interface Transaction {
   user_id: number;
   user_name: string;
   telegram_id: number;
+  phone_number: string | null;
   amount: number;
   payment_method: string;
   payment_status: string;
   transaction_ref: string | null;
+  service_title: string | null;
+  problem_summary: string | null;
   inquiry_id: number | null;
   appointment_id: number | null;
   created_at: string | null;
