@@ -254,6 +254,60 @@ async def process_aggregated_inquiry(
             )
             return
 
+        clean_normalized = re.sub(r"[^\w\s]", "", clean_text).strip()
+        words = clean_normalized.split()
+        thanks_phrases = {
+            "rahmat",
+            "raxmat",
+            "katta rahmat",
+            "katta raxmat",
+            "rahmat kattakon",
+            "raxmat kattakon",
+            "rahmat sizga",
+            "raxmat sizga",
+            "katta rahmat sizga",
+            "sog boling",
+            "sog buling",
+            "salomat boling",
+            "tashakkur",
+            "katta tashakkur",
+            "spasibo",
+            "bolshoe spasibo",
+            "bolshoye spasibo",
+            "spasibo bolshoe",
+            "spasibo bolshoye",
+            "blagodaryu",
+            "спасибо",
+            "большое спасибо",
+            "спасибо большое",
+            "благодарю",
+            "благодарствую",
+        }
+        is_thanks = clean_normalized in thanks_phrases or (
+            "?" not in combined_text
+            and len(words) <= 4
+            and (
+                any(w in {"rahmat", "raxmat", "tashakkur", "spasibo", "спасибо", "благодарю"} for w in words)
+                or ("sog" in words and any(b in words for b in ("boling", "buling")))
+                or ("salomat" in words and any(b in words for b in ("boling", "buling")))
+            )
+        )
+        if is_thanks:
+            thanks_reply = (
+                "Salomat bo’ling! Agar yana shunga o'xshash huquqiy savollaringiz bo'lsa bemalol bizga murojaat qilishingiz mumkin. Ishlaringizga omad tilayman!"
+                if lang == "uz"
+                else "Пожалуйста! Если у вас возникнут похожие юридические вопросы, вы всегда можете обратиться к нам. Удачи в ваших делах!"
+            )
+            await last_message.answer(thanks_reply)
+            await ChatService.log_message(
+                session=session,
+                user_id=fresh_user.id,
+                telegram_id=fresh_user.telegram_id,
+                sender_type="bot",
+                text=thanks_reply,
+            )
+            return
+
         if len(clean_text) < 6:
             too_short_msg = t("too_short", lang)
             await last_message.answer(too_short_msg)

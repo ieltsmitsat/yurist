@@ -651,3 +651,71 @@ async def test_dynamic_cta_and_service_fulfillment():
         PaymentService.confirm_payment = orig_confirm
 
 
+@pytest.mark.asyncio
+async def test_services_details_has_no_guarantee():
+    from app.bot.handlers.public.services import format_service_details_text
+
+    text_uz = format_service_details_text("Yuridik audit", "Shartnoma tekshirish", "100 000 so'm", "uz")
+    assert "Kafolat" not in text_uz
+    assert "🛡" not in text_uz
+
+    text_ru = format_service_details_text("Юридический аудит", "Проверка договора", "100 000 сум", "ru")
+    assert "Гарантия" not in text_ru
+    assert "🛡" not in text_ru
+
+
+@pytest.mark.asyncio
+async def test_gratitude_inquiry_response():
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from aiogram.types import Chat, Message
+    from aiogram.types import User as TgUser
+
+    from app.bot.handlers.public.inquiry import process_aggregated_inquiry
+    from app.services.chat_service import ChatService
+    from app.services.inquiry_debouncer import BufferedMessage
+
+    user_mock = MagicMock()
+    user_mock.id = 55
+    user_mock.telegram_id = 12345
+    user_mock.language = "uz"
+    user_mock.phone_number = "+998901234567"
+    user_mock.question_count = 1
+
+    msg = MagicMock(spec=Message)
+    msg.message_id = 99
+    msg.text = "Rahmat, sog' bo'ling!"
+    msg.caption = None
+    msg.chat = Chat(id=12345, type="private")
+    msg.from_user = TgUser(id=12345, is_bot=False, first_name="Dilshod")
+    msg.answer = AsyncMock()
+
+    bot = AsyncMock()
+
+    batch = [
+        BufferedMessage(
+            logged_msg_id=1,
+            message=msg,
+            text="Rahmat, sog' bo'ling!",
+            received_at=12345.0,
+        )
+    ]
+
+    mock_session = AsyncMock()
+    scalar_mock = MagicMock()
+    scalar_mock.scalar_one_or_none.return_value = user_mock
+    mock_session.execute.return_value = scalar_mock
+
+    with patch("app.bot.handlers.public.inquiry.AsyncSessionLocal") as mock_session_local, \
+         patch.object(ChatService, "log_message", new_callable=AsyncMock):
+        mock_session_local.return_value.__aenter__.return_value = mock_session
+        await process_aggregated_inquiry(user=user_mock, batch=batch, bot=bot)
+
+    assert msg.answer.called
+    reply_text = msg.answer.call_args[0][0]
+    assert "Salomat bo’ling!" in reply_text
+    assert "Ishlaringizga omad tilayman!" in reply_text
+
+
+
+

@@ -27,13 +27,12 @@ router.message.filter(F.chat.type == "private")
 
 
 def format_service_details_text(service_title: str, service_desc: str | None, price_fmt: str, lang: str) -> str:
-    """Format structured legal service card with deliverables, guarantees, and pricing."""
+    """Format structured legal service card with deliverables and pricing."""
     if lang == "uz":
         return (
             f"💼 <b>{service_title}</b>\n\n"
             f"{service_desc or 'Professional yuridik xizmat.'}\n\n"
             f"💵 <b>Rasmiy narxi:</b> {price_fmt}\n"
-            "🛡 <b>Kafolat:</b> Rasmiy shartnoma va to'liq maxfiylik.\n"
             "⏱ <b>Bajarilish muddati:</b> To'lov tasdiqlangach 24 soat ichida (yoki kelishuv asosida).\n\n"
             "<i>Quyidagi to'lov yoki bog'lanish usulini tanlang:</i>"
         )
@@ -41,7 +40,6 @@ def format_service_details_text(service_title: str, service_desc: str | None, pr
         f"💼 <b>{service_title}</b>\n\n"
         f"{service_desc or 'Квалифицированная юридическая помощь.'}\n\n"
         f"💵 <b>Стоимость:</b> {price_fmt}\n"
-        "🛡 <b>Гарантия:</b> Официальный юридический договор и полная конфиденциальность.\n"
         "⏱ <b>Срок исполнения:</b> В течение 24 часов после оплаты (или по договоренности).\n\n"
         "<i>Выберите способ оплаты или связи с юристом:</i>"
     )
@@ -63,13 +61,13 @@ async def handle_services_menu(
         "💼 <b>Yuridik Xizmatlar va Rasmiy Tariflar</b>\n\n"
         "Malakali huquqshunoslar tomonidan ko'rsatiladigan professional huquqiy xizmatlar bilan tanishing va o'zingizga keraklisini tanlang:\n\n"
         "✅ Rasmiy yuridik shartnoma\n"
-        "✅ 100% maxfiylik va himoya kafolati\n"
+        "✅ 100% maxfiylik va huquqiy himoya\n"
         "✅ Qonuniy asoslangan professional yondashuv"
         if lang == "uz"
         else "💼 <b>Юридические Услуги и Тарифы</b>\n\n"
         "Ознакомьтесь с перечнем профессиональных правовых услуг и выберите нужный тариф:\n\n"
         "✅ Официальный юридический договор\n"
-        "✅ 100% конфиденциальность и защита ваших прав\n"
+        "✅ 100% конфиденциальность и правовая защита\n"
         "✅ Опытные квалифицированные специалисты"
     )
     await message.answer(intro, reply_markup=services_catalog_kb(services, lang))

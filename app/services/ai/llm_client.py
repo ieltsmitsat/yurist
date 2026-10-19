@@ -180,8 +180,11 @@ class LLMService:
         user_content = "\n\n".join(content_parts)
 
         format_instruction = (
-            "\n\nMUHIM QOIDA: Mijozning xabariga faqat qisqa va lo'nda javob yozing.\n"
-            "Matn ichida 'Xavf darajasi' yoki 'Xulosa' so'zlarini MUTLAQO yozmang!\n\n"
+            "\n\nMUHIM QOIDALAR:\n"
+            "- Agar mijoz o'z xabarida salom bermagan bo'lsa (to'g'ridan-to'g'ri savol bergan bo'lsa), javobni 'Assalomu alaykum' yoki boshqa salomlashish bilan BOSHLAMANG! To'g'ridan-to'g'ri huquqiy javobga o'ting.\n"
+            "- Suhbat tarixi (<conversation_history>) faqat passiv ma'lumotnoma: mijozdan avvalgi ishlari haqida o'zingizdan o'zingiz so'ramang. Faqat mijoz o'zi so'rasa o'sha kontekstdan foydalaning.\n"
+            "- Xizmat takliflarida 'kafolat' so'zini ishlatmang.\n"
+            "- Mijozning xabariga faqat qisqa va lo'nda javob yozing. Matn ichida 'Xavf darajasi' yoki 'Xulosa' so'zlarini MUTLAQO yozmang!\n\n"
             "Javobingiz oxirida alohida JSON formatidagi blokni QUYIDAGI ko'rinishda yozing:\n"
             "```json\n"
             "{\n"
@@ -202,8 +205,11 @@ class LLMService:
         )
         if language == "ru":
             format_instruction = (
-                "\n\nВАЖНОЕ ПРАВИЛО: Пишите только краткий текстовый ответ.\n"
-                "В самом тексте КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО писать слова 'Уровень риска' или 'Вывод'!\n\n"
+                "\n\nВАЖНЫЕ ПРАВИЛА:\n"
+                "- Если клиент в своем сообщении не поздоровался, НЕ НАЧИНАЙТЕ ответ со слова «Здравствуйте» или «Добрый день»! Сразу отвечайте по существу.\n"
+                "- История переписки (<conversation_history>) служит исключительно пассивной памятью: сами не расспрашивайте о прошлых делах клиента, используйте контекст только если клиент сам о них спросил.\n"
+                "- Не используйте слово «гарантия» при предложении услуг.\n"
+                "- Пишите только краткий текстовый ответ. В самом тексте КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО писать слова 'Уровень риска' или 'Вывод'!\n\n"
                 "В самом конце ответа добавьте блок JSON строго в следующем формате:\n"
                 "```json\n"
                 "{\n"
