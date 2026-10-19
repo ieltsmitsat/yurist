@@ -455,3 +455,77 @@ async def test_services_and_pricing_handlers():
     p2p_text = p2p_cb.message.answer.call_args[0][0]
     assert "Karta orqali to'lov" in p2p_text
 
+
+@pytest.mark.asyncio
+async def test_helplines_reply_button_handlers():
+    from unittest.mock import AsyncMock, MagicMock
+    from aiogram.types import Message
+    from app.bot.handlers.public.helplines import (
+        handle_helplines_menu,
+        handle_helpline_category_click,
+        handle_helpline_back_to_main,
+    )
+    from app.db.models.helpline import Helpline
+    from app.services.helpline_service import HelplineService
+
+    session = AsyncMock()
+    user = MagicMock()
+    user.language = "uz"
+
+    # Mock helpline
+    h1 = Helpline(
+        id=1,
+        category_uz="Sud tizimi",
+        category_ru="Судебная система",
+        organization_uz="Oliy sud",
+        organization_ru="Верховный суд",
+        phone_number="1144",
+        description_uz="Ishonch telefoni",
+        order=1,
+        is_active=True,
+    )
+
+    orig_categories = HelplineService.get_active_categories
+    orig_by_cat = HelplineService.get_by_category
+    orig_seed = HelplineService.seed_default_helplines
+
+    HelplineService.get_active_categories = AsyncMock(return_value=[("Sud tizimi", "Судебная система")])
+    HelplineService.get_by_category = AsyncMock(return_value=[h1])
+    HelplineService.seed_default_helplines = AsyncMock()
+
+    try:
+        # 1. Main helplines menu message
+        msg1 = MagicMock(spec=Message)
+        msg1.answer = AsyncMock()
+        await handle_helplines_menu(msg1, session, user)
+        assert msg1.answer.called
+        text1 = msg1.answer.call_args[0][0]
+        assert "Ishonch telefonlari katalogi" in text1
+        kb1 = msg1.answer.call_args[1]["reply_markup"]
+        assert any("📂 Sud tizimi" in btn.text for row in kb1.keyboard for btn in row)
+        assert any("🔙 Asosiy menyuga qaytish" in btn.text for row in kb1.keyboard for btn in row)
+
+        # 2. Click category reply button
+        msg2 = MagicMock(spec=Message)
+        msg2.text = "📂 Sud tizimi"
+        msg2.answer = AsyncMock()
+        await handle_helpline_category_click(msg2, session, user)
+        assert msg2.answer.called
+        text2 = msg2.answer.call_args[0][0]
+        assert "Oliy sud" in text2
+        assert "1144" in text2
+
+        # 3. Back to main menu
+        msg3 = MagicMock(spec=Message)
+        msg3.text = "🔙 Asosiy menyuga qaytish"
+        msg3.answer = AsyncMock()
+        await handle_helpline_back_to_main(msg3, user)
+        assert msg3.answer.called
+        text3 = msg3.answer.call_args[0][0]
+        assert "Asosiy menyu:" in text3
+    finally:
+        HelplineService.get_active_categories = orig_categories
+        HelplineService.get_by_category = orig_by_cat
+        HelplineService.seed_default_helplines = orig_seed
+
+

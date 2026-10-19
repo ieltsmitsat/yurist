@@ -76,6 +76,10 @@ async def init_database() -> None:
         # Seed services if empty
         await PaymentService.seed_default_services(session)
 
+        # Seed helplines if empty
+        from app.services.helpline_service import HelplineService
+        await HelplineService.seed_default_helplines(session)
+
         # Seed system access (lawyers, groups, admins) if empty
         await AccessService.seed_default_access(session)
 

@@ -260,3 +260,29 @@ def referral_share_kb(ref_link: str, lang: str = "uz") -> InlineKeyboardMarkup:
         ]
     )
 
+
+def helplines_categories_reply_kb(
+    categories: list[tuple[str, str]], lang: str = "uz"
+) -> ReplyKeyboardMarkup:
+    """Generate reply keyboard for helpline categories with a back button."""
+    keyboard: list[list[KeyboardButton]] = []
+    
+    # 2 buttons per row or 1 if long
+    row: list[KeyboardButton] = []
+    for cat_uz, cat_ru in categories:
+        name = cat_uz if lang == "uz" else cat_ru
+        btn_text = f"📂 {name}"
+        row.append(KeyboardButton(text=btn_text))
+        if len(row) == 2:
+            keyboard.append(row)
+            row = []
+    if row:
+        keyboard.append(row)
+
+    # Add back to main menu button
+    back_text = "🔙 Asosiy menyuga qaytish" if lang == "uz" else "🔙 Главное меню"
+    keyboard.append([KeyboardButton(text=back_text)])
+
+    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
+
+
