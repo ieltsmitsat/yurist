@@ -157,9 +157,9 @@ def service_fulfillment_kb(
     ]
 
     share_text = (
-        "Assalomu alaykum! Men ushbu bot orqali malakali huquqshunos xizmatidan foydalandim va juda mamnun bo'ldim. Siz ham savol berishingiz mumkin:"
+        "Assalomu alaykum! Men ushbu bot orqali malakali yurist va advokat xizmatidan foydalandim va bu bot judayam foydali ekan. Siz ham ushbu botdan foydalanib ko’ring."
         if lang == "uz"
-        else "Здравствуйте! Я воспользовался услугами юриста через этого бота и остался очень доволен. Вы тоже можете задать вопрос:"
+        else "Здравствуйте! Я воспользовался услугами квалифицированного юриста и адвоката через этого бота, и этот бот оказался очень полезным. Попробуйте и вы воспользоваться им."
     )
     share_url = f"https://t.me/share/url?url={quote(ref_link)}&text={quote(share_text)}"
     share_btn_text = "📢 Yaqinlarga ulashish" if lang == "uz" else "📢 Поделиться с близкими"
@@ -177,9 +177,9 @@ def service_fulfillment_kb(
 def service_rated_kb(ref_link: str, lang: str = "uz") -> InlineKeyboardMarkup:
     """Follow-up keyboard after client submitted their star rating."""
     share_text = (
-        "Assalomu alaykum! Men ushbu bot orqali malakali huquqshunos xizmatidan foydalandim va juda mamnun bo'ldim. Siz ham savol berishingiz mumkin:"
+        "Assalomu alaykum! Men ushbu bot orqali malakali yurist va advokat xizmatidan foydalandim va bu bot judayam foydali ekan. Siz ham ushbu botdan foydalanib ko’ring."
         if lang == "uz"
-        else "Здравствуйте! Я воспользовался услугами юриста через этого бота и остался очень доволен. Вы тоже можете задать вопрос:"
+        else "Здравствуйте! Я воспользовался услугами квалифицированного юриста и адвоката через этого бота, и этот бот оказался очень полезным. Попробуйте и вы воспользоваться им."
     )
     share_url = f"https://t.me/share/url?url={quote(ref_link)}&text={quote(share_text)}"
     share_btn_text = "📢 Yaqinlarga ulashish" if lang == "uz" else "📢 Поделиться с близкими"
@@ -320,9 +320,9 @@ def settings_kb(lang: str = "uz") -> InlineKeyboardMarkup:
 def referral_share_kb(ref_link: str, lang: str = "uz") -> InlineKeyboardMarkup:
     """Inline keyboard for viral referral sharing (1-click Telegram share) and live stats refresh."""
     share_text = (
-        "Assalomu alaykum! Malakali huquqshunos va AI yurist yordamchisi. Savolingizni bepul bering:"
+        "Assalomu alaykum! Men ushbu bot orqali malakali yurist va advokat xizmatidan foydalandim va bu bot judayam foydali ekan. Siz ham ushbu botdan foydalanib ko’ring."
         if lang == "uz"
-        else "Здравствуйте! Квалифицированный юрист и AI-помощник. Задайте свой правовой вопрос бесплатно:"
+        else "Здравствуйте! Я воспользовался услугами квалифицированного юриста и адвоката через этого бота, и этот бот оказался очень полезным. Попробуйте и вы воспользоваться им."
     )
     share_url = f"https://t.me/share/url?url={quote(ref_link)}&text={quote(share_text)}"
     share_btn_text = "📤 Do'stlarga ulashish" if lang == "uz" else "📤 Поделиться с друзьями"
