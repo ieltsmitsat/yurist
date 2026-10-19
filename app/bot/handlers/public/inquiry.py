@@ -308,6 +308,31 @@ async def process_aggregated_inquiry(
             )
             return
 
+        # Check office address / location inquiry
+        from app.services.org_settings_service import OrgSettingsService
+
+        if OrgSettingsService.is_office_address_inquiry(combined_text):
+            org_settings = await OrgSettingsService.get_settings(session)
+            addr_text = OrgSettingsService.format_office_address_text(org_settings, lang)
+            await last_message.answer(addr_text)
+            await ChatService.log_message(
+                session=session,
+                user_id=fresh_user.id,
+                telegram_id=fresh_user.telegram_id,
+                sender_type="bot",
+                text=addr_text,
+            )
+            return
+
+        # Check general services catalog or consultation request
+        from app.bot.handlers.business.messages import is_general_services_inquiry
+
+        if is_general_services_inquiry(combined_text):
+            from app.bot.handlers.public.services import handle_services_menu
+
+            await handle_services_menu(last_message, session, fresh_user)
+            return
+
         if len(clean_text) < 6:
             too_short_msg = t("too_short", lang)
             await last_message.answer(too_short_msg)

@@ -52,27 +52,9 @@ def is_services_menu_text_trigger(message: Message) -> bool:
     t = message.text.strip().lower()
     if t in ["💼 xizmatlar va narxlar", "💼 услуги и цены"]:
         return True
-    service_phrases = [
-        "xizmatlardan foydalan",
-        "xizmatdan foydalan",
-        "qanday xizmatlar",
-        "qanaqa xizmatlar",
-        "xizmatlar haqida",
-        "xizmatlaringiz haqida",
-        "xizmatlaringiz qanday",
-        "xizmatlar ro'yxati",
-        "xizmatlar royxati",
-        "mavjud xizmatlar",
-        "xizmatlar narxi",
-        "xizmatlar narxlari",
-        "barcha xizmatlar",
-        "какие услуги",
-        "список услуг",
-        "тарифы",
-        "стоимость услуг",
-        "хочу воспользоваться услугой",
-    ]
-    return any(p in t for p in service_phrases)
+    from app.bot.handlers.business.messages import is_general_services_inquiry
+
+    return is_general_services_inquiry(t)
 
 
 @router.message(is_services_menu_text_trigger)

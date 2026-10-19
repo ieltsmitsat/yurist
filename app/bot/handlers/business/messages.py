@@ -46,64 +46,102 @@ def extract_phone(text: str) -> str | None:
 
 
 def is_general_services_inquiry(text: str) -> bool:
-    """Detect if client is inquiring generally about available services or catalog."""
+    """Check if the user is asking about general services catalog, pricing, or wants consultation."""
     q = text.lower().strip()
-    inquiry_phrases = [
-        "qanday xizmatlar",
-        "qanaqa xizmatlar",
-        "qanday xizmatlaringiz",
-        "qanaqa xizmatlaringiz",
-        "xizmatlar haqida",
-        "xizmatlaringiz haqida",
-        "xizmatlaringiz qanday",
+    words = q.split()
+
+    # Explicit phrases requesting services catalog or consultation
+    explicit_phrases = [
+        "xizmatlar",
+        "xizmatlaringiz",
+        "qanday xizmat",
+        "qanaqa xizmat",
+        "nima xizmat",
         "xizmatlar ro'yxati",
         "xizmatlar royxati",
         "mavjud xizmatlar",
-        "xizmatlardan foydalan",
-        "xizmatdan foydalan",
-        "xizmatlaringizdan foydalan",
-        "xizmat olmoq",
+        "barcha xizmatlar",
+        "xizmatlar haqida",
+        "xizmatlaringiz haqida",
+        "tariflar",
+        "narxlar",
         "xizmatlar narxi",
         "xizmatlar narxlari",
         "xizmatlar qancha",
-        "barcha xizmatlar",
-        "xizmatlaringiz bormi",
-        "qanday xizmat",
-        "nima xizmat",
-        "tariflar",
-        "prays",
-        "price",
+        "narxi qancha",
+        "qancha turadi",
+        "konsultatsiya olmoqchiman",
+        "konsultatsiya olaman",
+        "konsultatsiya olsak",
+        "konsultatsiya narxi",
+        "konsultatsiya qancha",
+        "maslahat olmoqchiman",
+        "maslahat olaman",
+        "xizmatdan foydalan",
+        "xizmatlardan foydalan",
+        "xizmatlaringizdan foydalan",
+        "xizmat olmoq",
+        "xizmat olaman",
+        "xizmat olmoqchiman",
+        # Russian equivalents
         "какие услуги",
         "какие есть услуги",
         "список услуг",
         "перечень услуг",
         "стоимость услуг",
         "хочу воспользоваться услугой",
+        "хочу воспользоваться услугами",
         "хочу заказать услугу",
         "ваши услуги",
         "тарифы",
         "прайс",
+        "хочу консультацию",
+        "получить консультацию",
+        "стоимость консультации",
     ]
-    return any(p in q for p in inquiry_phrases)
+    if any(p in q for p in explicit_phrases):
+        return True
+
+    # Short intent queries (e.g. "konsultatsiya", "maslahat kerak", "yurist kerak")
+    if len(words) <= 5:
+        short_intent_phrases = [
+            "konsultatsiya",
+            "konsultatsiya kerak",
+            "maslahat kerak",
+            "xizmat kerak",
+            "yordam kerak",
+            "yurist kerak",
+            "advokat kerak",
+            "yuridik yordam",
+            "консультация",
+            "консультацию",
+            "нужна консультация",
+            "юридическая помощь",
+            "нужен юрист",
+            "нужен адвокат",
+        ]
+        if any(p in q for p in short_intent_phrases):
+            return True
+
+    return False
 
 
 def format_services_catalog_text(services: Sequence[Service], lang: str = "uz") -> str:
     """Format rich catalog of active legal services for business chat."""
     if lang == "ru":
         lines = [
-            "💼 <b>Наши квалифицированные юридические услуги:</b>\n"
+            "💼 <b>Наши квалифицированные юридические услуги и тарифы:</b>\n"
         ]
         for idx, s in enumerate(services, start=1):
             price_fmt = PaymentService.format_service_price(s.price)
             title = s.title_ru or s.title_uz
-            desc = s.description_ru or s.description_uz or ""
-            short_desc = desc.split("\n")[0].strip() if desc else ""
+            desc = (s.description_ru or s.description_uz or "").strip()
             lines.append(f"<b>{idx}. {title}</b>\n💵 Стоимость: <b>{price_fmt}</b>")
-            if short_desc:
-                lines.append(f"ℹ️ <i>{short_desc}</i>")
+            if desc:
+                lines.append(f"ℹ️ <i>{desc}</i>")
             lines.append("")
         lines.append(
-            "👉 <i>Чтобы выбрать услугу, отправьте её номер (например: <b>1</b> или <b>2</b>) или название услуги.</i>"
+            "👉 <i>Чтобы выбрать услугу, отправьте её номер (например: <b>1</b> или <b>2</b>) или напишите название услуги.</i>"
         )
         return "\n".join(lines)
 
@@ -113,11 +151,10 @@ def format_services_catalog_text(services: Sequence[Service], lang: str = "uz") 
     for idx, s in enumerate(services, start=1):
         price_fmt = PaymentService.format_service_price(s.price)
         title = s.title_uz
-        desc = s.description_uz or ""
-        short_desc = desc.split("\n")[0].strip() if desc else ""
+        desc = (s.description_uz or "").strip()
         lines.append(f"<b>{idx}. {title}</b>\n💵 Narxi: <b>{price_fmt}</b>")
-        if short_desc:
-            lines.append(f"ℹ️ <i>{short_desc}</i>")
+        if desc:
+            lines.append(f"ℹ️ <i>{desc}</i>")
         lines.append("")
     lines.append(
         "👉 <i>Kerakli xizmatni tanlash uchun uning raqamini (masalan: <b>1</b> yoki <b>2</b>) yoki xizmat nomini yozib yuboring.</i>"
@@ -133,7 +170,7 @@ def detect_service_selection(
     """Detect which service the client selected by number, ordinal, or keywords."""
     clean = text.strip().lower()
 
-    # 1. Number / Ordinal selection
+    # 1. Number selection (e.g. "1", "2", "3-xizmat", etc.)
     if is_awaiting or clean.isdigit() or re.match(r"^[1-9]\b", clean):
         num_match = re.search(r"\b([1-9])\b", clean)
         if num_match:
@@ -141,18 +178,36 @@ def detect_service_selection(
             if 0 <= idx < len(services):
                 return services[idx]
 
-        ordinals = {
-            "bir": 0, "birinchi": 0, "birinchisi": 0, "1-si": 0, "1-xizmat": 0,
-            "ikki": 1, "ikkinchi": 1, "ikkinchisi": 1, "2-si": 1, "2-xizmat": 1,
-            "uch": 2, "uchinchi": 2, "uchinchisi": 2, "3-si": 2, "3-xizmat": 2,
-            "to'rt": 3, "tort": 3, "to'rtinchi": 3, "tortinchisi": 3, "4-si": 3, "4-xizmat": 3,
-            "besh": 4, "beshinchi": 4, "beshinchisi": 4, "5-si": 4, "5-xizmat": 4,
-        }
-        for word, idx in ordinals.items():
-            if word in clean and 0 <= idx < len(services):
-                return services[idx]
+    # If NOT awaiting choice after catalog presentation, DO NOT auto-select by keywords!
+    # The client must first see all services before choosing.
+    if not is_awaiting:
+        return None
 
-    # 2. Keyword matching across services
+    # 2. Ordinals (when awaiting choice)
+    ordinals = {
+        "bir": 0, "birinchi": 0, "birinchisi": 0, "1-si": 0, "1-xizmat": 0,
+        "ikki": 1, "ikkinchi": 1, "ikkinchisi": 1, "2-si": 1, "2-xizmat": 1,
+        "uch": 2, "uchinchi": 2, "uchinchisi": 2, "3-si": 2, "3-xizmat": 2,
+        "to'rt": 3, "tort": 3, "to'rtinchi": 3, "tortinchisi": 3, "4-si": 3, "4-xizmat": 3,
+        "besh": 4, "beshinchi": 4, "beshinchisi": 4, "5-si": 4, "5-xizmat": 4,
+        "olti": 5, "oltinchi": 5, "oltinchisi": 5, "6-si": 5, "6-xizmat": 5,
+        "yetti": 6, "yettinchi": 6, "yettinchisi": 6, "7-si": 6, "7-xizmat": 6,
+    }
+    for word, idx in ordinals.items():
+        if word in clean and 0 <= idx < len(services):
+            return services[idx]
+
+    # 3. Specific service distinctions when awaiting choice
+    if "telegram" in clean or "onlayn" in clean or "online" in clean:
+        for s in services:
+            if "telegram" in s.title_uz.lower():
+                return s
+
+    if "office" in clean or "ofis" in clean:
+        for s in services:
+            if "office" in s.title_uz.lower() or "ofis" in s.title_uz.lower():
+                return s
+
     if any(k in clean for k in ["da'vo", "davo", "ariza", "talabnoma", "pretenziya", "isk"]):
         for s in services:
             if "da'vo" in s.title_uz.lower() or s.service_type == "claim":
@@ -168,14 +223,9 @@ def detect_service_selection(
             if "sud" in s.title_uz.lower() or s.service_type == "court":
                 return s
 
-    if any(k in clean for k in ["biznes", "autsorsing", "kompaniya", "mchj"]):
+    if any(k in clean for k in ["biznes", "autsorsing", "kompaniya", "mchj", "oylik"]):
         for s in services:
-            if "biznes" in s.title_uz.lower() or s.service_type == "business":
-                return s
-
-    if any(k in clean for k in ["konsultatsiya", "maslahat"]):
-        for s in services:
-            if s.service_type == "consultation" or "konsultatsiya" in s.title_uz.lower():
+            if "biznes" in s.title_uz.lower() or s.service_type in ("retainer", "business"):
                 return s
 
     return None
@@ -226,10 +276,7 @@ async def find_relevant_service(session: AsyncSession, text: str) -> Service | N
     if matched:
         return matched
 
-    for s in services:
-        if s.service_type == "consultation" or "konsultatsiya" in s.title_uz.lower():
-            return s
-    return services[0] if services else None
+    return None
 
 
 @router.business_connection()
@@ -514,6 +561,21 @@ async def handle_business_message(
             )
             return
 
+    # 2.5. Check if user is asking about office address / location
+    if OrgSettingsService.is_office_address_inquiry(question_text):
+        org_settings = await OrgSettingsService.get_settings(session)
+        addr_text = OrgSettingsService.format_office_address_text(org_settings, client_user.language)
+        await message.answer(text=addr_text)
+        await ChatService.log_message(
+            session=session,
+            user_id=client_user.id,
+            telegram_id=bot.id,
+            sender_type="bot",
+            text=addr_text,
+            is_business=True,
+        )
+        return
+
     # 3. Check if user selected a service (by number, ordinal, or keyword)
     chosen_service = detect_service_selection(question_text, services, is_awaiting=awaiting_choice)
     if chosen_service:
@@ -599,55 +661,71 @@ async def handle_business_message(
         if stored_service_id:
             target_service = next((s for s in services if s.id == stored_service_id), None)
         if not target_service:
-            target_service = await find_relevant_service(session, question_text)
+            # If user hasn't selected a service yet, present the full services catalog first
+            catalog_text = format_services_catalog_text(services, client_user.language)
+            if redis_client:
+                try:
+                    await redis_client.set(f"biz_awaiting_service:{client_user.id}", "1", ex=3600)
+                except Exception as e:  # noqa: BLE001
+                    logger.debug("Failed setting biz_awaiting_service: %s", e)
 
-        if target_service:
-            price_fmt = PaymentService.format_service_price(target_service.price)
-            if not client_user.phone_number:
-                prompt_phone_text = (
-                    f"💼 <b>{target_service.title_uz}</b>\n"
-                    f"💵 Rasmiy xizmat narxi: <b>{price_fmt}</b>\n\n"
-                    "Xizmatni rasmiylashtirish va to'lov rekvizitlarini yuborishimiz uchun, "
-                    "iltimos, <b>telefon raqamingizni</b> yozib qoldiring (masalan: <code>+998901234567</code>):"
-                )
-                await message.answer(text=prompt_phone_text)
-                await ChatService.log_message(
-                    session=session,
-                    user_id=client_user.id,
-                    telegram_id=bot.id,
-                    sender_type="bot",
-                    text=prompt_phone_text,
-                    is_business=True,
-                )
-                return
-
-            org_settings = await OrgSettingsService.get_settings(session)
-            _ = await PaymentService.create_transaction(
-                session=session,
-                user=client_user,
-                amount=target_service.price,
-                payment_method="p2p_card",
-                transaction_ref=target_service.title_uz,
-            )
-            p2p_msg = (
-                "💳 <b>To'lov ma'lumotlari</b>\n\n"
-                f"💼 Xizmat: <b>{target_service.title_uz}</b>\n"
-                f"💵 To'lov summasi: <b>{price_fmt}</b>\n\n"
-                f"💳 Karta raqami: <code>{org_settings.card_number}</code>\n"
-                f"👤 Qabul qiluvchi: <b>{org_settings.card_holder}</b>\n\n"
-                "<i>To'lovni amalga oshirgach, to'lov cheki (skrinshot)ni ushbu chatga yuboring. "
-                "Huquqshunos to'lovni tasdiqlashi bilan xizmat ko’rsatish darhol boshlanadi.</i>"
-            )
-            await message.answer(text=p2p_msg)
+            await message.answer(text=catalog_text)
             await ChatService.log_message(
                 session=session,
                 user_id=client_user.id,
                 telegram_id=bot.id,
                 sender_type="bot",
-                text=p2p_msg,
+                text=catalog_text,
                 is_business=True,
             )
             return
+
+        price_fmt = PaymentService.format_service_price(target_service.price)
+        if not client_user.phone_number:
+            prompt_phone_text = (
+                f"💼 <b>{target_service.title_uz}</b>\n"
+                f"💵 Rasmiy xizmat narxi: <b>{price_fmt}</b>\n\n"
+                "Xizmatni rasmiylashtirish va to'lov rekvizitlarini yuborishimiz uchun, "
+                "iltimos, <b>telefon raqamingizni</b> yozib qoldiring (masalan: <code>+998901234567</code>):"
+            )
+            await message.answer(text=prompt_phone_text)
+            await ChatService.log_message(
+                session=session,
+                user_id=client_user.id,
+                telegram_id=bot.id,
+                sender_type="bot",
+                text=prompt_phone_text,
+                is_business=True,
+            )
+            return
+
+        org_settings = await OrgSettingsService.get_settings(session)
+        _ = await PaymentService.create_transaction(
+            session=session,
+            user=client_user,
+            amount=target_service.price,
+            payment_method="p2p_card",
+            transaction_ref=target_service.title_uz,
+        )
+        p2p_msg = (
+            "💳 <b>To'lov ma'lumotlari</b>\n\n"
+            f"💼 Xizmat: <b>{target_service.title_uz}</b>\n"
+            f"💵 To'lov summasi: <b>{price_fmt}</b>\n\n"
+            f"💳 Karta raqami: <code>{org_settings.card_number}</code>\n"
+            f"👤 Qabul qiluvchi: <b>{org_settings.card_holder}</b>\n\n"
+            "<i>To'lovni amalga oshirgach, to'lov cheki (skrinshot)ni ushbu chatga yuboring. "
+            "Huquqshunos to'lovni tasdiqlashi bilan xizmat ko’rsatish darhol boshlanadi.</i>"
+        )
+        await message.answer(text=p2p_msg)
+        await ChatService.log_message(
+            session=session,
+            user_id=client_user.id,
+            telegram_id=bot.id,
+            sender_type="bot",
+            text=p2p_msg,
+            is_business=True,
+        )
+        return
 
     # =========================================================================
     # D. GENERATE UNDETECTABLE HUMAN ATTORNEY LEGAL REPLY

@@ -51,12 +51,23 @@ class InquiryService:
             language=user.language,
         )
 
+        # Fetch dynamic organization profile (address, phone, working hours)
+        from app.services.org_settings_service import OrgSettingsService
+
+        org_settings = await OrgSettingsService.get_settings(session)
+        firm_profile = (
+            f"Ofis manzili: {org_settings.office_address}\n"
+            f"Telefon: {org_settings.contact_phone}\n"
+            f"Ish vaqti: {org_settings.working_hours}"
+        )
+
         # Generate legal response with Undetectable AI Persona and conversation history
         analysis = await self.llm.analyze_legal_inquiry(
             question=question_text,
             language=user.language,
             rag_context=rag_context,
             conversation_history=history_context,
+            firm_profile=firm_profile,
         )
 
         # Decrement free question credit only for genuine legal inquiries

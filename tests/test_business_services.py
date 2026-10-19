@@ -451,10 +451,11 @@ async def test_business_chat_services_catalog_and_selection():
     assert detect_service_selection("3-xizmat", services, is_awaiting=True) == s3
     assert detect_service_selection("ikkinchisi", services, is_awaiting=True) == s2
 
-    # Test selection by keyword
-    assert detect_service_selection("Menga shartnoma tekshirish kerak", services) == s2
-    assert detect_service_selection("Sudga da'vo arizasi bermoqchiman", services) == s3
-    assert detect_service_selection("Oddiy salom", services) is None
+    # Test selection by keyword (requires is_awaiting=True per requirement to see catalog first)
+    assert detect_service_selection("Menga shartnoma tekshirish kerak", services, is_awaiting=True) == s2
+    assert detect_service_selection("Sudga da'vo arizasi bermoqchiman", services, is_awaiting=True) == s3
+    assert detect_service_selection("Menga shartnoma tekshirish kerak", services, is_awaiting=False) is None
+    assert detect_service_selection("Oddiy salom", services, is_awaiting=True) is None
 
 
 def test_string_price_formatting_and_extraction():
@@ -469,4 +470,39 @@ def test_string_price_formatting_and_extraction():
     assert PaymentService.format_service_price(Decimal(50000)) == "50 000 so'm"
 
 
+def test_office_address_inquiry_and_formatting():
+    from app.db.models.org_settings import OrgSettings
+    from app.services.org_settings_service import OrgSettingsService
 
+    # Test address detection
+    assert OrgSettingsService.is_office_address_inquiry("Ofisingiz qayerda?") is True
+    assert OrgSettingsService.is_office_address_inquiry("Manzilingizni bering") is True
+    assert OrgSettingsService.is_office_address_inquiry("Lokatsiyani yuboring") is True
+    assert OrgSettingsService.is_office_address_inquiry("Где находится ваш офис?") is True
+    assert OrgSettingsService.is_office_address_inquiry("Адрес офиса") is True
+    assert OrgSettingsService.is_office_address_inquiry("Aliment bo'yicha ariza yozmoqchiman") is False
+
+    # Test format text
+    settings_obj = OrgSettings(
+        office_address="Toshkent sh., Amir Temur shoh ko'chasi, 42-uy",
+        contact_phone="+998901234567",
+        working_hours="Dushanba - Shanba, 09:00 - 18:00",
+    )
+    uz_text = OrgSettingsService.format_office_address_text(settings_obj, lang="uz")
+    assert "Toshkent sh., Amir Temur shoh ko'chasi, 42-uy" in uz_text
+    assert "+998901234567" in uz_text
+    assert "09:00 - 18:00" in uz_text
+
+    ru_text = OrgSettingsService.format_office_address_text(settings_obj, lang="ru")
+    assert "Toshkent sh., Amir Temur shoh ko'chasi, 42-uy" in ru_text
+    assert "+998901234567" in ru_text
+
+
+def test_consultation_intent_triggers_catalog():
+    from app.bot.handlers.business.messages import is_general_services_inquiry
+
+    assert is_general_services_inquiry("konsultatsiya olaman") is True
+    assert is_general_services_inquiry("konsultatsiya olmoqchiman") is True
+    assert is_general_services_inquiry("xizmatdan foydalanaman") is True
+    assert is_general_services_inquiry("xizmatlardan foydalanmoqchiman") is True
+    assert is_general_services_inquiry("konsultatsiya") is True

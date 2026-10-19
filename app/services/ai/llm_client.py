@@ -157,6 +157,7 @@ class LLMService:
         language: str = "uz",
         rag_context: str | None = None,
         conversation_history: str | None = None,
+        firm_profile: str | None = None,
     ) -> LegalAnalysisResult:
         """Generate humanlike lawyer response and risk scoring for client inquiry."""
         system_prompt = PromptManager.get("PERSONA_SYSTEM_PROMPT_UZ") if language == "uz" else PromptManager.get("PERSONA_SYSTEM_PROMPT_RU")
@@ -165,6 +166,9 @@ class LLMService:
         sanitized_question = PIIMasker.redact_financial(question)
 
         content_parts: list[str] = []
+        if firm_profile:
+            content_parts.append(f"<firm_profile>\n{firm_profile}\n</firm_profile>")
+
         if conversation_history:
             content_parts.append(f"<conversation_history>\n{conversation_history}\n</conversation_history>")
 

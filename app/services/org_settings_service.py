@@ -52,3 +52,66 @@ class OrgSettingsService:
         await session.refresh(settings_record)
         logger.info("Updated OrgSettings #%d: %s", settings_record.id, kwargs)
         return settings_record
+
+    @staticmethod
+    def is_office_address_inquiry(text: str) -> bool:
+        """Detect if client is asking about office address, location, or how to visit."""
+        q = text.lower().strip()
+        keywords = [
+            "manzil",
+            "manzili",
+            "manzilingiz",
+            "manzilingizni",
+            "lokatsiya",
+            "lokatsiyangiz",
+            "lokatsiyani",
+            "joylashuv",
+            "joylashgan",
+            "adres",
+            "adresingiz",
+            "адрес",
+            "адрес офиса",
+            "где находится",
+            "где вы находитесь",
+            "где ваш офис",
+            "где офис",
+            "локация",
+            "как проехать",
+            "как добраться",
+            "куда подъехать",
+            "куда подойти",
+        ]
+        if any(k in q for k in keywords):
+            return True
+
+        phrases = [
+            "ofis qayerda",
+            "ofisingiz qayerda",
+            "qayerdasizlar",
+            "qayerda sizlar",
+            "qayerga borsam",
+            "qayerga borish",
+            "qayerga borsak",
+            "ofisga borish",
+            "ofisga bormoqchiman",
+        ]
+        return any(p in q for p in phrases)
+
+    @staticmethod
+    def format_office_address_text(settings_record: OrgSettings, lang: str = "uz") -> str:
+        """Format dynamic office address, contact phone, and working hours from admin settings."""
+        if lang == "ru":
+            return (
+                "🏢 <b>Информация о нашем офисе:</b>\n\n"
+                f"📍 <b>Адрес:</b> {settings_record.office_address}\n"
+                f"📞 <b>Телефон:</b> {settings_record.contact_phone}\n"
+                f"⏰ <b>График работы:</b> {settings_record.working_hours}\n\n"
+                "<i>Вы можете посетить наш офис в рабочее время или связаться с нами по телефону.</i>"
+            )
+        return (
+            "🏢 <b>Bizning ofisimiz ma'lumotlari:</b>\n\n"
+            f"📍 <b>Manzil:</b> {settings_record.office_address}\n"
+            f"📞 <b>Telefon:</b> {settings_record.contact_phone}\n"
+            f"⏰ <b>Ish vaqti:</b> {settings_record.working_hours}\n\n"
+            "<i>Ish vaqtida ofisimizga tashrif buyurishingiz yoki huquqshunos bilan bog'lanishingiz mumkin.</i>"
+        )
