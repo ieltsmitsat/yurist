@@ -116,6 +116,27 @@ async def handle_referral_callback(
                 # Content not modified
                 pass
     else:
+        chat = getattr(callback.message, "chat", None) if callback.message else None
+        chat_type = getattr(chat, "type", "private") if chat else "private"
+        if chat_type != "private":
+            try:
+                await bot.send_message(
+                    chat_id=callback.from_user.id,
+                    text=text,
+                    reply_markup=kb,
+                )
+                await callback.answer(
+                    "Taklif havolangiz shaxsiy bot chatiga yuborildi! 👥",
+                    show_alert=True,
+                )
+                return
+            except Exception:  # noqa: BLE001
+                await callback.answer(
+                    f"Taklif havolasini olish uchun botga kiring: @{bot_username}",
+                    show_alert=True,
+                )
+                return
+
         await callback.answer()
         if isinstance(callback.message, Message):
             await callback.message.answer(text, reply_markup=kb)

@@ -32,12 +32,15 @@ async def handle_start(message: Message, session: AsyncSession, user: User | Non
     if not message.from_user:
         return
 
-    # Extract referral code if present (anti-fraud: prevent self-referral)
+    # Extract referral code or service order action if present
     referred_by_code = None
+    order_type = None
     if message.text and len(message.text.split()) > 1:
-        code = message.text.split()[1].strip()
-        if code != f"ref_{message.from_user.id}":
-            referred_by_code = code
+        param = message.text.split()[1].strip()
+        if param.startswith("order_"):
+            order_type = param.replace("order_", "")
+        elif param != f"ref_{message.from_user.id}":
+            referred_by_code = param
 
     # Get or create user
     current_user, is_new = await UserService.get_or_create_user(
@@ -108,6 +111,24 @@ async def handle_start(message: Message, session: AsyncSession, user: User | Non
         await ChatService.log_message(
             session, current_user.id, current_user.telegram_id, "bot", welcome
         )
+
+        # If arrived via order deep-link, immediately present service card
+        if order_type:
+            from app.bot.handlers.public.services import format_service_details_text
+            from app.bot.keyboards.keyboards import payment_methods_kb
+            from app.services.payment_service import PaymentService
+
+            service = await PaymentService.get_service_by_type(session, order_type)
+            if not service:
+                await PaymentService.seed_default_services(session)
+                service = await PaymentService.get_service_by_type(session, order_type)
+
+            if service:
+                title = service.title_uz if lang == "uz" else service.title_ru
+                desc = service.description_uz if lang == "uz" else service.description_ru
+                price_fmt = f"{service.price:,.0f} so'm".replace(",", " ")
+                card_text = format_service_details_text(title, desc, price_fmt, lang)
+                await message.answer(card_text, reply_markup=payment_methods_kb(service.id, lang))
 
 
 @router.callback_query(F.data.startswith("set_lang:"))

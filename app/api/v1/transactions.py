@@ -154,4 +154,28 @@ async def update_transaction_status(
                 except Exception as e:  # noqa: BLE001
                     logging.getLogger(__name__).warning("Could not send payment rejection to %s: %s", user.telegram_id, e)
 
+            elif tx.payment_status == "fulfilled":
+                from app.bot.keyboards.keyboards import service_fulfillment_kb
+                from app.core.config import settings
+                from app.services.referral_service import ReferralService
+
+                bot_user = await bot.get_me()
+                bot_username = bot_user.username or settings.BOT_USERNAME
+                ref_link = ReferralService.get_referral_link(bot_username, user)
+
+                text = (
+                    "🎉 <b>Hurmatli mijoz!</b>\n\n"
+                    "Siz buyurtma qilgan yuridik xizmat muvaffaqiyatli bajarildi va yakunlandi!\n\n"
+                    "Biz uchun sizning fikringiz juda muhim. Iltimos, ko'rsatilgan xizmat sifatini baholang:"
+                    if lang == "uz"
+                    else "🎉 <b>Уважаемый клиент!</b>\n\n"
+                    "Юридическая услуга успешно выполнена в полном объеме!\n\n"
+                    "Нам очень важно ваше мнение. Пожалуйста, оцените качество оказанной услуги:"
+                )
+                kb = service_fulfillment_kb(tx_id=tx.id, ref_link=ref_link, lang=lang)
+                try:
+                    await bot.send_message(chat_id=user.telegram_id, text=text, reply_markup=kb)
+                except Exception as e:  # noqa: BLE001
+                    logging.getLogger(__name__).warning("Could not send service fulfillment to %s: %s", user.telegram_id, e)
+
     return {"ok": True, "id": tx.id, "status": tx.payment_status}

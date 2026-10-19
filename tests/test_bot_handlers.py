@@ -459,11 +459,13 @@ async def test_services_and_pricing_handlers():
 @pytest.mark.asyncio
 async def test_helplines_reply_button_handlers():
     from unittest.mock import AsyncMock, MagicMock
+
     from aiogram.types import Message
+
     from app.bot.handlers.public.helplines import (
-        handle_helplines_menu,
-        handle_helpline_category_click,
         handle_helpline_back_to_main,
+        handle_helpline_category_click,
+        handle_helplines_menu,
     )
     from app.db.models.helpline import Helpline
     from app.services.helpline_service import HelplineService
@@ -527,5 +529,125 @@ async def test_helplines_reply_button_handlers():
         HelplineService.get_active_categories = orig_categories
         HelplineService.get_by_category = orig_by_cat
         HelplineService.seed_default_helplines = orig_seed
+
+
+@pytest.mark.asyncio
+async def test_dynamic_cta_and_service_fulfillment():
+    from unittest.mock import AsyncMock, MagicMock
+
+    from aiogram.types import Message
+
+    from app.bot.handlers.public.services import (
+        handle_payment_approval,
+        handle_rate_service,
+        handle_service_completed,
+    )
+    from app.bot.keyboards.keyboards import cta_keyboard, service_fulfillment_kb
+    from app.db.models.transaction import Transaction
+    from app.services.ai.llm_client import detect_service_cta_from_question
+
+    # 1. Test heuristic detector
+    assert detect_service_cta_from_question("Qarzimni undirish uchun sudga ariza yozish kerak") == "claim"
+    assert detect_service_cta_from_question("Ijara shartnomasini tekshirib berolasizmi?") == "audit"
+    assert detect_service_cta_from_question("Ertaga sud majlisi bo'ladi, himoyachi kerak") == "court"
+    assert detect_service_cta_from_question("MChJ ochish va korxona soliqlari haqida") == "business"
+    assert detect_service_cta_from_question("Oddiy savolim bor edi") == "consultation"
+
+    # 2. Test dynamic CTA keyboards
+    kb_claim = cta_keyboard("claim", "uz")
+    assert kb_claim is not None
+    assert "Da'vo arizasi" in kb_claim.inline_keyboard[0][0].text
+    assert kb_claim.inline_keyboard[0][0].callback_data == "order_service:claim"
+
+    kb_audit = cta_keyboard("audit", "uz")
+    assert kb_audit is not None
+    assert "Shartnoma" in kb_audit.inline_keyboard[0][0].text
+    assert kb_audit.inline_keyboard[0][0].callback_data == "order_service:audit"
+
+    # 3. Test service fulfillment keyboard
+    f_kb = service_fulfillment_kb(tx_id=99, ref_link="https://t.me/bot?start=ref_1", lang="uz")
+    assert len(f_kb.inline_keyboard[0]) == 5
+    assert f_kb.inline_keyboard[0][4].callback_data == "rate_srv:tx_99_5"
+    assert "Yaqinlarga ulashish" in f_kb.inline_keyboard[1][0].text
+
+    # 4. Test payment approval sets pay_done button
+    session = AsyncMock()
+    bot = MagicMock()
+    bot.send_message = AsyncMock()
+    bot.get_me = AsyncMock()
+    bot.get_me.return_value.username = "test_bot"
+
+    from app.db.models.user import User
+
+    client_user = User(
+        id=1,
+        telegram_id=987654,
+        full_name="Sinovchi",
+        language="uz",
+    )
+
+    tx = Transaction(
+        id=77,
+        user_id=1,
+        amount=150000,
+        payment_method="p2p_card",
+        payment_status="pending",
+    )
+    mock_tx_res = MagicMock()
+    mock_tx_res.scalar_one_or_none.side_effect = [client_user, tx, client_user, tx, client_user]
+    session.execute.return_value = mock_tx_res
+
+    approval_cb = MagicMock()
+    approval_cb.data = "pay_ok:tx_77"
+    approval_cb.from_user.full_name = "Admin Alisher"
+    approval_cb.answer = AsyncMock()
+    approval_cb.message = MagicMock(spec=Message)
+    approval_cb.message.caption = "To'lov cheki"
+    approval_cb.message.edit_caption = AsyncMock()
+
+    from app.services.payment_service import PaymentService
+    orig_confirm = PaymentService.confirm_payment
+    PaymentService.confirm_payment = AsyncMock(return_value=tx)
+
+    try:
+        await handle_payment_approval(approval_cb, session, bot)
+        assert approval_cb.message.edit_caption.called
+        caption_updated = approval_cb.message.edit_caption.call_args[1]["caption"]
+        assert "TO'LOV TASDIQLANDI" in caption_updated
+        markup_updated = approval_cb.message.edit_caption.call_args[1]["reply_markup"]
+        assert "pay_done:tx_77" in markup_updated.inline_keyboard[0][0].callback_data
+
+        # 5. Test pay_done marks fulfilled and notifies user
+        done_cb = MagicMock()
+        done_cb.data = "pay_done:tx_77"
+        done_cb.from_user.full_name = "Lawyer Jasur"
+        done_cb.answer = AsyncMock()
+        done_cb.message = MagicMock(spec=Message)
+        done_cb.message.caption = "Old caption"
+        done_cb.message.edit_caption = AsyncMock()
+
+        await handle_service_completed(done_cb, session, bot)
+        assert done_cb.message.edit_caption.called
+        assert tx.payment_status == "fulfilled"
+        assert bot.send_message.called
+
+        # 6. Test rate_srv callback
+        rate_cb = MagicMock()
+        rate_cb.data = "rate_srv:tx_77_5"
+        rate_cb.from_user.id = 123
+        rate_cb.answer = AsyncMock()
+        rate_cb.message = MagicMock(spec=Message)
+        rate_cb.message.edit_text = AsyncMock()
+
+        user_mock = MagicMock()
+        user_mock.language = "uz"
+        user_mock.referral_code = "ref_123"
+
+        await handle_rate_service(rate_cb, session, bot, user_mock)
+        assert rate_cb.message.edit_text.called
+        edit_text = rate_cb.message.edit_text.call_args[0][0]
+        assert "Katta rahmat" in edit_text
+    finally:
+        PaymentService.confirm_payment = orig_confirm
 
 

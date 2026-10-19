@@ -35,6 +35,7 @@ export function getStatusColor(status: string): string {
     lawyer: "bg-amber-50 text-amber-700 border border-amber-200",
     pending: "bg-orange-50 text-orange-700 border border-orange-200",
     completed: "bg-emerald-50 text-emerald-700 border border-emerald-200",
+    fulfilled: "bg-blue-50 text-blue-700 border border-blue-200",
     failed: "bg-red-50 text-red-700 border border-red-200",
     refunded: "bg-slate-50 text-slate-700 border border-slate-200",
     answered: "bg-emerald-50 text-emerald-700 border border-emerald-200",

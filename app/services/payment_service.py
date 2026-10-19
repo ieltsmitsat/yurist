@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.service import Service
@@ -190,18 +190,20 @@ class PaymentService:
 
     @classmethod
     async def seed_default_services(cls, session: AsyncSession) -> int:
-        """Seed initial legal services catalog if empty."""
-        stmt = select(func.count(Service.id))
+        """Seed initial legal services catalog if empty or missing any default types."""
+        stmt = select(Service.service_type)
         res = await session.execute(stmt)
-        count = res.scalar() or 0
-        if count > 0:
-            return 0
+        existing_types = set(res.scalars().all())
 
+        added = 0
         for item in DEFAULT_LEGAL_SERVICES:
-            srv = Service(**item)
-            session.add(srv)
-        await session.commit()
-        logger.info(
-            "Successfully seeded %d legal services into catalog.", len(DEFAULT_LEGAL_SERVICES)
-        )
-        return len(DEFAULT_LEGAL_SERVICES)
+            if item["service_type"] not in existing_types:
+                srv = Service(**item)
+                session.add(srv)
+                existing_types.add(item["service_type"])
+                added += 1
+
+        if added > 0:
+            await session.commit()
+            logger.info("Successfully seeded %d missing legal services into catalog.", added)
+        return added

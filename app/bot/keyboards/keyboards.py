@@ -82,21 +82,47 @@ def main_menu_kb(lang: str = "uz") -> ReplyKeyboardMarkup:
 
 
 def cta_keyboard(cta_type: str, lang: str = "uz") -> InlineKeyboardMarkup | None:
-    """Contextual Call-to-Action inline buttons attached to AI legal responses."""
+    """Contextual Call-to-Action inline buttons attached to AI legal responses.
+
+    Dynamically adapts the 1st button to match the user's question:
+    - audit: Shartnoma auditi va ekspertiza
+    - claim: Da'vo arizasi va talabnoma tuzish
+    - court: Sudda huquqshunos vakilligi
+    - business: Biznes uchun yuridik hamrohlik
+    - consultation: Shaxsiy konsultatsiyaga yozilish
+    """
     if cta_type in ("none", ""):
         return None
 
     buttons = []
     if cta_type == "audit":
         btn_text = (
-            "📑 To'liq shartnoma auditiga buyurtma"
+            "📑 Shartnoma auditiga buyurtma"
             if lang == "uz"
-            else "📑 Заказать полный аудит договора"
+            else "📑 Заказать аудит договора"
         )
         buttons.append([InlineKeyboardButton(text=btn_text, callback_data="order_service:audit")])
+    elif cta_type == "claim":
+        btn_text = (
+            "📝 Da'vo arizasi / talabnoma tuzish"
+            if lang == "uz"
+            else "📝 Составление иска и претензии"
+        )
+        buttons.append([InlineKeyboardButton(text=btn_text, callback_data="order_service:claim")])
     elif cta_type == "court":
-        btn_text = "⚖️ Sudda huquqshunos vakilligi" if lang == "uz" else "⚖️ Представительство в суде"
+        btn_text = (
+            "⚖️ Sudda huquqshunos vakilligi"
+            if lang == "uz"
+            else "⚖️ Представительство в суде"
+        )
         buttons.append([InlineKeyboardButton(text=btn_text, callback_data="order_service:court")])
+    elif cta_type == "business":
+        btn_text = (
+            "🏢 Biznes uchun yuridik xizmat"
+            if lang == "uz"
+            else "🏢 Юридическое обслуживание бизнеса"
+        )
+        buttons.append([InlineKeyboardButton(text=btn_text, callback_data="order_service:business")])
     else:
         btn_text = (
             "📞 Shaxsiy konsultatsiyaga yozilish"
@@ -107,7 +133,7 @@ def cta_keyboard(cta_type: str, lang: str = "uz") -> InlineKeyboardMarkup | None
             [InlineKeyboardButton(text=btn_text, callback_data="order_service:consultation")]
         )
 
-    # Referral / Invite friends option (+1 free question)
+    # Second button: Do'stlarni taklif qilish (+1 savol)
     ref_btn_text = (
         "👥 Do'stlarni taklif qilish (+1 savol)"
         if lang == "uz"
@@ -116,6 +142,55 @@ def cta_keyboard(cta_type: str, lang: str = "uz") -> InlineKeyboardMarkup | None
     buttons.append([InlineKeyboardButton(text=ref_btn_text, callback_data="show_referral")])
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def service_fulfillment_kb(
+    tx_id: int | None,
+    ref_link: str,
+    lang: str = "uz",
+) -> InlineKeyboardMarkup:
+    """Rating (1-5 stars) and viral sharing keyboard sent to client upon service completion."""
+    tx_param = f"tx_{tx_id}" if tx_id else "direct"
+    stars_row = [
+        InlineKeyboardButton(text=f"⭐ {i}", callback_data=f"rate_srv:{tx_param}_{i}")
+        for i in range(1, 6)
+    ]
+
+    share_text = (
+        "Assalomu alaykum! Men ushbu bot orqali malakali huquqshunos xizmatidan foydalandim va juda mamnun bo'ldim. Siz ham savol berishingiz mumkin:"
+        if lang == "uz"
+        else "Здравствуйте! Я воспользовался услугами юриста через этого бота и остался очень доволен. Вы тоже можете задать вопрос:"
+    )
+    share_url = f"https://t.me/share/url?url={quote(ref_link)}&text={quote(share_text)}"
+    share_btn_text = "📢 Yaqinlarga ulashish" if lang == "uz" else "📢 Поделиться с близкими"
+    new_srv_text = "💼 Boshqa xizmatlar" if lang == "uz" else "💼 Другие услуги"
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            stars_row,
+            [InlineKeyboardButton(text=share_btn_text, url=share_url)],
+            [InlineKeyboardButton(text=new_srv_text, callback_data="back_to_services")],
+        ]
+    )
+
+
+def service_rated_kb(ref_link: str, lang: str = "uz") -> InlineKeyboardMarkup:
+    """Follow-up keyboard after client submitted their star rating."""
+    share_text = (
+        "Assalomu alaykum! Men ushbu bot orqali malakali huquqshunos xizmatidan foydalandim va juda mamnun bo'ldim. Siz ham savol berishingiz mumkin:"
+        if lang == "uz"
+        else "Здравствуйте! Я воспользовался услугами юриста через этого бота и остался очень доволен. Вы тоже можете задать вопрос:"
+    )
+    share_url = f"https://t.me/share/url?url={quote(ref_link)}&text={quote(share_text)}"
+    share_btn_text = "📢 Yaqinlarga ulashish" if lang == "uz" else "📢 Поделиться с близкими"
+    new_srv_text = "💼 Boshqa xizmatlar" if lang == "uz" else "💼 Другие услуги"
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=share_btn_text, url=share_url)],
+            [InlineKeyboardButton(text=new_srv_text, callback_data="back_to_services")],
+        ]
+    )
 
 
 def sos_options_kb(lang: str = "uz") -> InlineKeyboardMarkup:

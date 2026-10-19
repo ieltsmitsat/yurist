@@ -66,6 +66,7 @@ export default function TransactionsPage() {
             <option value="">Barcha to&apos;lovlar</option>
             <option value="pending">⏳ Kutilmoqda</option>
             <option value="completed">✅ Tasdiqlangan</option>
+            <option value="fulfilled">🏁 Bajarildi</option>
             <option value="failed">❌ Bekor qilingan</option>
             <option value="refunded">↩️ Qaytarilgan</option>
           </select>
@@ -209,6 +210,16 @@ export default function TransactionsPage() {
                             </button>
                           </div>
                         )}
+                        {tx.payment_status === "completed" && (
+                          <button
+                            disabled={updatingId === tx.id}
+                            onClick={() => handleStatusChange(tx.id, "fulfilled")}
+                            title="Xizmat bajarildi deb belgilash"
+                            className="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded font-medium shadow-sm transition-colors text-center"
+                          >
+                            🏁 Ish bajarildi
+                          </button>
+                        )}
                         <select
                           value={tx.payment_status}
                           disabled={updatingId === tx.id}
@@ -217,6 +228,7 @@ export default function TransactionsPage() {
                         >
                           <option value="pending">⏳ Kutilmoqda</option>
                           <option value="completed">✅ Tasdiqlangan</option>
+                          <option value="fulfilled">🏁 Bajarildi</option>
                           <option value="failed">❌ Bekor qilingan</option>
                           <option value="refunded">↩️ Qaytarilgan</option>
                         </select>
@@ -322,6 +334,15 @@ export default function TransactionsPage() {
                       </button>
                     </div>
                   )}
+                  {tx.payment_status === "completed" && (
+                    <button
+                      disabled={updatingId === tx.id}
+                      onClick={() => handleStatusChange(tx.id, "fulfilled")}
+                      className="w-full py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium shadow-sm transition-colors text-center"
+                    >
+                      🏁 Ish bajarildi (Mijozga baholash yuborish)
+                    </button>
+                  )}
                   <select
                     value={tx.payment_status}
                     disabled={updatingId === tx.id}
@@ -330,6 +351,7 @@ export default function TransactionsPage() {
                   >
                     <option value="pending">⏳ Kutilmoqda</option>
                     <option value="completed">✅ Tasdiqlangan</option>
+                    <option value="fulfilled">🏁 Bajarildi</option>
                     <option value="failed">❌ Bekor qilingan</option>
                     <option value="refunded">↩️ Qaytarilgan</option>
                   </select>
@@ -436,6 +458,15 @@ export default function TransactionsPage() {
                       ❌ Bekor qilish
                     </button>
                   </>
+                )}
+                {selectedTx.payment_status === "completed" && (
+                  <button
+                    disabled={updatingId === selectedTx.id}
+                    onClick={() => handleStatusChange(selectedTx.id, "fulfilled")}
+                    className="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium shadow-sm transition-colors"
+                  >
+                    🏁 Ish bajarildi
+                  </button>
                 )}
                 <button
                   onClick={() => setSelectedTx(null)}

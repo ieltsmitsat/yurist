@@ -22,8 +22,31 @@ class LegalAnalysisResult:
     risk_level: str  # none, low, medium, high
     risk_score: int  # 0-100
     upsell_offer: str
-    cta_type: str  # none, consultation, audit, court
+    cta_type: str  # none, consultation, audit, court, claim, business
     is_legal_case: bool = True
+
+
+def detect_service_cta_from_question(question: str) -> str:
+    """Heuristic detector mapping question subject to legal service type."""
+    q = question.lower()
+
+    # Audit / Shartnoma tekshirish
+    if any(k in q for k in ["shartnoma", "dogovor", "kontrakt", "ijara", "oldi-sotdi", "ekspertiza", "hujjat tahlili"]):
+        return "audit"
+
+    # Claim / Da'vo arizasi / Talabnoma / Qarz undirish
+    if any(k in q for k in ["da'vo", "davo", "ariza", "talabnoma", "qarz", "undirish", "pulimni", "qoplash", "zarar", "aliment", "pretenz", "isk"]):
+        return "claim"
+
+    # Court / Sud majlisi / Himoya
+    if any(k in q for k in ["sud", "sudya", "prokuror", "tergov", "iib", "militsiya", "jinoyat", "mahkama", "apellats", "kassats"]):
+        return "court"
+
+    # Business / MChJ / Korxona
+    if any(k in q for k in ["mchj", "ooo", "firma", "biznes", "korxona", "yatt", "tadbirkor", "soliq", "ta'sischi", "ulush"]):
+        return "business"
+
+    return "consultation"
 
 
 class LLMService:
@@ -166,9 +189,16 @@ class LLMService:
             '  "risk_level": "none" | "low" | "medium" | "high",\n'
             '  "risk_score": 0-100,\n'
             '  "upsell_offer": "Mijozga taklif qilinadigan xizmat matni yoki bo\'sh",\n'
-            '  "cta_type": "none" | "consultation" | "audit" | "court"\n'
+            '  "cta_type": "consultation" | "audit" | "court" | "claim" | "business" | "none"\n'
             "}\n"
-            "```"
+            "```\n"
+            "cta_type tanlash qoidalari:\n"
+            "- Shartnomalar, ijara, oldi-sotdi, hujjat tekshirish: 'audit'\n"
+            "- Qarz undirish, sudga da'vo arizasi, talabnoma tuzish, zarar qoplash, aliment: 'claim'\n"
+            "- Sud majlisi, tergov, sudda himoya yoki vakillik: 'court'\n"
+            "- Biznes, MChJ, soliq, korxona va tadbirkorlik masalalari: 'business'\n"
+            "- Boshqa shaxsiy yoki umumiy yuridik savollar: 'consultation'\n"
+            "- Faqat salomlashish yoki nohuquqiy xabar: 'none'\n"
         )
         if language == "ru":
             format_instruction = (
@@ -181,9 +211,16 @@ class LLMService:
                 '  "risk_level": "none" | "low" | "medium" | "high",\n'
                 '  "risk_score": 0-100,\n'
                 '  "upsell_offer": "Текст предлагаемой услуги или пусто",\n'
-                '  "cta_type": "none" | "consultation" | "audit" | "court"\n'
+                '  "cta_type": "consultation" | "audit" | "court" | "claim" | "business" | "none"\n'
                 "}\n"
-                "```"
+                "```\n"
+                "Правила выбора cta_type:\n"
+                "- Договоры, аренда, купля-продажа, экспертиза документов: 'audit'\n"
+                "- Взыскание долга, исковое заявление, досудебная претензия, алименты: 'claim'\n"
+                "- Судебное заседание, следствие, защита в суде: 'court'\n"
+                "- Бизнес, ООО, налоги, корпоративные вопросы: 'business'\n"
+                "- Другие личные или общие юридические вопросы: 'consultation'\n"
+                "- Приветствие или неюридический вопрос: 'none'\n"
             )
 
         full_system = system_prompt + format_instruction
@@ -193,7 +230,7 @@ class LLMService:
             model=settings.GEMINI_MODEL,
             temperature=0.35,
         )
-        return self._parse_structured_response(raw_text, language)
+        return self._parse_structured_response(raw_text, language, question=sanitized_question)
 
     async def analyze_express_audit(
         self,
@@ -282,7 +319,9 @@ class LLMService:
             result_text = normalize_uzbek_text(result_text)
         return result_text
 
-    def _parse_structured_response(self, raw_text: str, language: str) -> LegalAnalysisResult:
+    def _parse_structured_response(
+        self, raw_text: str, language: str, question: str = ""
+    ) -> LegalAnalysisResult:
         """Extract response text and trailing JSON metadata block."""
         risk_level = "medium"
         risk_score = 50
@@ -314,6 +353,15 @@ class LLMService:
         # Normalize risk_level
         if risk_level not in ("none", "low", "medium", "high"):
             risk_level = "medium"
+
+        # Validate and dynamically infer cta_type from question if default
+        if cta_type not in ("none", "consultation", "audit", "court", "claim", "business"):
+            cta_type = "consultation"
+
+        if is_legal_case and question and (cta_type == "consultation" or not cta_type):
+            detected = detect_service_cta_from_question(question)
+            if detected != "consultation":
+                cta_type = detected
 
         # Always clean any accidental risk lines from the visible text
         lines = [
