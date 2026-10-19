@@ -230,3 +230,44 @@ async def test_llm_service_with_pii_and_rag_context():
     assert res.risk_level == "medium"
 
 
+def test_greeting_adjustment_rules():
+    from app.utils.text import adjust_greeting, has_user_greeting
+
+    # 1. has_user_greeting tests
+    assert has_user_greeting("Assalomu alaykum, aliment haqida savol") is True
+    assert has_user_greeting("assalomualaykum") is True
+    assert has_user_greeting("Assalomu aleykum!") is True
+    assert has_user_greeting("salom") is True
+    assert has_user_greeting("Ассалому алайкум") is True
+    assert has_user_greeting("Menga aliment to'lashmayapti") is False
+    assert has_user_greeting("Shartnomani bekor qilish tartibi qanday?") is False
+    assert has_user_greeting("Здравствуйте, вопрос по иску", language="ru") is True
+    assert has_user_greeting("Вопрос по иску", language="ru") is False
+
+    # 2. adjust_greeting when user did NOT greet -> greeting must be stripped
+    raw_with_greet = "Assalomu alaykum! Mehnat kodeksiga ko'ra siz ishdan asossiz bo'shatilgansiz."
+    q_no_greet = "Meni ishdan bo'shatishdi, nima qilsam bo'ladi?"
+    res_no_greet = adjust_greeting(raw_with_greet, question=q_no_greet, language="uz")
+    assert not res_no_greet.lower().startswith("assalomu alaykum")
+    assert res_no_greet.startswith("Mehnat kodeksiga ko'ra")
+
+    # 3. adjust_greeting when user DID greet -> must start with 'Assalomu alaykum, yaxshimisiz!'
+    q_with_greet = "Assalomu alaykum, meni ishdan bo'shatishdi"
+    res_with_greet = adjust_greeting(raw_with_greet, question=q_with_greet, language="uz")
+    assert res_with_greet.startswith("Assalomu alaykum, yaxshimisiz!")
+    assert "Mehnat kodeksiga ko'ra" in res_with_greet
+
+    # 4. Russian: adjust_greeting when user did NOT greet -> strip greeting
+    raw_ru_greet = "Здравствуйте! Согласно Трудовому кодексу вы имеете право на компенсацию."
+    q_ru_no_greet = "Меня уволили без компенсации"
+    res_ru_no = adjust_greeting(raw_ru_greet, question=q_ru_no_greet, language="ru")
+    assert not res_ru_no.lower().startswith("здравствуйте")
+    assert res_ru_no.startswith("Согласно Трудовому кодексу")
+
+    # 5. Russian: adjust_greeting when user DID greet -> starts with Здравствуйте!
+    q_ru_with_greet = "Здравствуйте, меня уволили"
+    res_ru_with = adjust_greeting(raw_ru_greet, question=q_ru_with_greet, language="ru")
+    assert res_ru_with.startswith("Здравствуйте!")
+
+
+

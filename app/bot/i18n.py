@@ -50,8 +50,8 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         ),
     },
     "greeting_reply": {
-        "uz": "Savolingizni batafsil yozib qoldiring",
-        "ru": "Пожалуйста, опишите ваш вопрос более подробно.",
+        "uz": "Assalomu alaykum, yaxshimisiz! Qanday huquqiy masalada yordam bera olaman? Savolingizni batafsil yozib qoldiring.",
+        "ru": "Здравствуйте! Чем я могу вам помочь? Опишите ваш вопрос более подробно.",
     },
     "too_short": {
         "uz": "Savolingizni batafsil yozib qoldiring",

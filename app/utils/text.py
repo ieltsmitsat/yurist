@@ -101,3 +101,90 @@ def normalize_uzbek_text(text: str) -> str:
         text = pattern.sub(_word_repl, text)
 
     return text
+
+
+# Regex to detect user greetings in client inquiries (Latin and Cyrillic)
+_UZ_CLIENT_GREETING_RE: Final[re.Pattern[str]] = re.compile(
+    r"(?i)\b(as+al[oa]mu?\s*al[ae]ykum|as+alom|salomal[ae]ykum|salom\s*al[ae]ykum|salom|асс?ал[оа]м?у?\s*ал[ае]йкум|саломал[еа]йкум|салом)\b"
+)
+_RU_CLIENT_GREETING_RE: Final[re.Pattern[str]] = re.compile(
+    r"(?i)\b(здравствуйте|здравствуй|добрый\s+день|добрый\s+вечер|доброе\s+утро|привет|приветствую)\b"
+)
+
+# Regex to detect and strip opening greetings from bot/LLM output
+_UZ_GREETING_PREFIX_RE: Final[re.Pattern[str]] = re.compile(
+    r"^(?:"
+    r"(?:as+al[oa]mu?\s*al[ae]ykum|as+alom|salomal[ae]ykum|salom\s*al[ae]ykum|salom|xayrli\s+kun|асс?ал[оа]м?у?\s*ал[ае]йкум|саломал[еа]йкум|салом)\b"
+    r"(?:[^\w\n]+(?:hurmatli\s+\w+|mijoz|fuqaro))?"
+    r"[.,!?:]*\s*"
+    r"(?:(?:yaxshimisiz|charchamayapsizmi|ahvollaringiz\s+yaxshimi)[?!.]*\s*)?"
+    r"(?:sizga\s+qanday\s+yordam\s+bera\s+olaman[?!.]*\s*)?"
+    r")+\s*",
+    re.IGNORECASE,
+)
+_RU_GREETING_PREFIX_RE: Final[re.Pattern[str]] = re.compile(
+    r"^(?:"
+    r"(?:здравствуйте|здравствуй|добрый\s+день|добрый\s+вечер|доброе\s+утро|привет|приветствую)"
+    r"(?:[^\w\n]+(?:уважаемый\s+\w+|клиент))?"
+    r"[.,!?:]*\s*"
+    r"(?:(?:как\s+ваши\s+дела|как\s+дела)[?!.]*\s*)?"
+    r")+\s*",
+    re.IGNORECASE,
+)
+
+
+def has_user_greeting(text: str, language: str = "uz") -> bool:
+    """Return True if the user's message contains a greeting."""
+    if not text:
+        return False
+    if language == "ru":
+        return bool(_RU_CLIENT_GREETING_RE.search(text))
+    return bool(_UZ_CLIENT_GREETING_RE.search(text))
+
+
+def adjust_greeting(response_text: str, question: str, language: str = "uz") -> str:
+    """Adjust response greeting strictly based on whether the client greeted.
+
+    - If client did NOT greet: strip any LLM greeting so bot never starts with greeting.
+    - If client DID greet in Uzbek: start with 'Assalomu alaykum, yaxshimisiz! ...'.
+    - If client DID greet in Russian: start with 'Здравствуйте! ...'.
+    """
+    if not response_text:
+        return response_text
+
+    user_greeted = has_user_greeting(question, language)
+
+    if language == "uz":
+        stripped = _UZ_GREETING_PREFIX_RE.sub("", response_text).strip()
+        if not stripped:
+            return (
+                "Assalomu alaykum, yaxshimisiz! Qanday huquqiy yordam bera olaman?"
+                if user_greeted
+                else "Qanday huquqiy yordam bera olaman?"
+            )
+        if stripped[0].islower():
+            stripped = stripped[0].upper() + stripped[1:]
+
+        if user_greeted:
+            separator = "\n\n" if "\n" in response_text[:80] else " "
+            return f"Assalomu alaykum, yaxshimisiz!{separator}{stripped}"
+        return stripped
+
+    if language == "ru":
+        stripped = _RU_GREETING_PREFIX_RE.sub("", response_text).strip()
+        if not stripped:
+            return (
+                "Здравствуйте! Чем я могу вам помочь?"
+                if user_greeted
+                else "Чем я могу вам помочь?"
+            )
+        if stripped[0].islower():
+            stripped = stripped[0].upper() + stripped[1:]
+
+        if user_greeted:
+            separator = "\n\n" if "\n" in response_text[:80] else " "
+            return f"Здравствуйте!{separator}{stripped}"
+        return stripped
+
+    return response_text
+

@@ -11,7 +11,7 @@ from openai.types.chat import ChatCompletionMessageParam
 from app.core.config import settings
 from app.services.ai.pii_masker import PIIMasker
 from app.services.ai.prompts import PromptManager
-from app.utils.text import normalize_uzbek_text
+from app.utils.text import adjust_greeting, normalize_uzbek_text
 
 logger = logging.getLogger(__name__)
 
@@ -181,7 +181,8 @@ class LLMService:
 
         format_instruction = (
             "\n\nMUHIM QOIDALAR:\n"
-            "- Agar mijoz o'z xabarida salom bermagan bo'lsa (to'g'ridan-to'g'ri savol bergan bo'lsa), javobni 'Assalomu alaykum' yoki boshqa salomlashish bilan BOSHLAMANG! To'g'ridan-to'g'ri huquqiy javobga o'ting.\n"
+            "- Agar mijoz o'z xabarida 'Assalomu alaykum' deb salom bermagan bo'lsa (to'g'ridan-to'g'ri savol bergan bo'lsa), javobni 'Assalomu alaykum' yoki boshqa salomlashish bilan QAT'IYAN BOSHLAMANG! Hech qanday salom bermasdan to'g'ridan-to'g'ri huquqiy javobga o'ting.\n"
+            "- FAQAT VA FAQAT mijoz o'z xabarida 'Assalomu alaykum' deb salom bergan bo'lsa, javobni 'Assalomu alaykum, yaxshimisiz! ...' deb boshlang.\n"
             "- Suhbat tarixi (<conversation_history>) faqat passiv ma'lumotnoma: mijozdan avvalgi ishlari haqida o'zingizdan o'zingiz so'ramang. Faqat mijoz o'zi so'rasa o'sha kontekstdan foydalaning.\n"
             "- Xizmat takliflarida 'kafolat' so'zini ishlatmang.\n"
             "- Mijozning xabariga faqat qisqa va lo'nda javob yozing. Matn ichida 'Xavf darajasi' yoki 'Xulosa' so'zlarini MUTLAQO yozmang!\n\n"
@@ -206,7 +207,8 @@ class LLMService:
         if language == "ru":
             format_instruction = (
                 "\n\nВАЖНЫЕ ПРАВИЛА:\n"
-                "- Если клиент в своем сообщении не поздоровался, НЕ НАЧИНАЙТЕ ответ со слова «Здравствуйте» или «Добрый день»! Сразу отвечайте по существу.\n"
+                "- Если клиент в своем сообщении не поздоровался, КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО начинать ответ со слова «Здравствуйте» или «Добрый день»! Сразу отвечайте по существу.\n"
+                "- ТОЛЬКО если клиент сам первым поздоровался в своем сообщении, начните ответ со слова «Здравствуйте! ...».\n"
                 "- История переписки (<conversation_history>) служит исключительно пассивной памятью: сами не расспрашивайте о прошлых делах клиента, используйте контекст только если клиент сам о них спросил.\n"
                 "- Не используйте слово «гарантия» при предложении услуг.\n"
                 "- Пишите только краткий текстовый ответ. В самом тексте КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО писать слова 'Уровень риска' или 'Вывод'!\n\n"
@@ -392,6 +394,9 @@ class LLMService:
         if language == "uz":
             response_body = normalize_uzbek_text(response_body)
             upsell_offer = normalize_uzbek_text(upsell_offer)
+
+        if question:
+            response_body = adjust_greeting(response_body, question=question, language=language)
 
         if not is_legal_case or risk_level == "none":
             risk_level = "none"
