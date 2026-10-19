@@ -565,3 +565,47 @@ async def test_has_confirmed_office_consultation_db():
         # Confirm payment
         await PaymentService.confirm_payment(session, tx.id)
         assert await PaymentService.has_confirmed_office_consultation(session, user.id) is True
+
+
+@pytest.mark.asyncio
+async def test_native_location_extraction_and_sending():
+    from unittest.mock import AsyncMock
+
+    from app.db.models.org_settings import OrgSettings
+    from app.services.org_settings_service import OrgSettingsService
+
+    yandex_address = (
+        "Toshkent shahar, Chilonzor tumani, S mavze 1A/2\n"
+        "https://yandex.com/maps?whatshere%5Bpoint%5D=69.20197%2C41.278871&whatshere%5Bzoom%5D=18.958878&"
+        "ll=69.20197000000003%2C41.27887099922946&z=18.958878&si=xrvj9bmbxz387zdhwcw15k2htw"
+    )
+
+    # 1. Test clean address strips URL
+    clean = OrgSettingsService.get_clean_office_address(yandex_address)
+    assert clean == "Toshkent shahar, Chilonzor tumani, S mavze 1A/2"
+
+    # 2. Test coordinate extraction
+    coords = OrgSettingsService.extract_office_coordinates(yandex_address)
+    assert coords is not None
+    lat, lon = coords
+    assert round(lat, 4) == 41.2789
+    assert round(lon, 4) == 69.2020
+
+    # 3. Test sending native location
+    bot_mock = AsyncMock()
+    bot_mock.send_location = AsyncMock()
+
+    settings_obj = OrgSettings(office_address=yandex_address)
+    sent = await OrgSettingsService.send_office_location(
+        bot=bot_mock,
+        chat_id=123456,
+        settings_record=settings_obj,
+        business_connection_id="bc_999",
+    )
+    assert sent is True
+    assert bot_mock.send_location.called
+    kwargs = bot_mock.send_location.call_args[1]
+    assert kwargs["chat_id"] == 123456
+    assert round(kwargs["latitude"], 4) == 41.2789
+    assert round(kwargs["longitude"], 4) == 69.2020
+    assert kwargs["business_connection_id"] == "bc_999"

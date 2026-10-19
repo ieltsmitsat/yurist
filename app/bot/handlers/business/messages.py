@@ -567,9 +567,16 @@ async def handle_business_message(
         if has_paid:
             org_settings = await OrgSettingsService.get_settings(session)
             addr_text = OrgSettingsService.format_office_address_text(org_settings, client_user.language)
+            await message.answer(text=addr_text)
+            await OrgSettingsService.send_office_location(
+                bot=bot,
+                chat_id=client_user.telegram_id,
+                settings_record=org_settings,
+                business_connection_id=message.business_connection_id,
+            )
         else:
             addr_text = OrgSettingsService.format_office_service_notice(client_user.language)
-        await message.answer(text=addr_text)
+            await message.answer(text=addr_text)
         await ChatService.log_message(
             session=session,
             user_id=client_user.id,

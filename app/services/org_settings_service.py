@@ -1,6 +1,8 @@
 """Service for managing organization profile, contact, and payment settings."""
 
 import logging
+import re
+import urllib.parse
 from typing import Any
 
 from sqlalchemy import select
@@ -98,19 +100,67 @@ class OrgSettingsService:
         return any(p in q for p in phrases)
 
     @staticmethod
-    def format_office_address_text(settings_record: OrgSettings, lang: str = "uz") -> str:
+    def extract_office_coordinates(office_address: str | None) -> tuple[float, float] | None:
+        """Extract (latitude, longitude) from map URLs (Yandex, Google, 2GIS) or coordinates."""
+        if not office_address:
+            return None
+        decoded = urllib.parse.unquote(office_address)
+
+        # 1. Yandex: whatshere[point]=lon,lat or ll=lon,lat
+        yandex_match = re.search(r"(?:whatshere\[point\]|ll)=([0-9.]+)[,\s]+([0-9.]+)", decoded)
+        if yandex_match:
+            p1, p2 = float(yandex_match.group(1)), float(yandex_match.group(2))
+            if 36.0 <= p1 <= 46.0 and 55.0 <= p2 <= 75.0:
+                return (p1, p2)
+            if 36.0 <= p2 <= 46.0 and 55.0 <= p1 <= 75.0:
+                return (p2, p1)
+
+        # 2. Google / general: q=lat,lon or place/lat,lon or @lat,lon
+        google_match = re.search(r"(?:q|place|center|@)=?([0-9.]+)[,\s]+([0-9.]+)", decoded)
+        if google_match:
+            p1, p2 = float(google_match.group(1)), float(google_match.group(2))
+            if 36.0 <= p1 <= 46.0 and 55.0 <= p2 <= 75.0:
+                return (p1, p2)
+            if 36.0 <= p2 <= 46.0 and 55.0 <= p1 <= 75.0:
+                return (p2, p1)
+
+        # 3. Any two coordinate floats in text (e.g. 41.278871, 69.20197)
+        coord_matches = re.findall(r"([0-9]{1,2}\.[0-9]{3,})[,\s]+([0-9]{1,3}\.[0-9]{3,})", decoded)
+        for c1, c2 in coord_matches:
+            p1, p2 = float(c1), float(c2)
+            if 36.0 <= p1 <= 46.0 and 55.0 <= p2 <= 75.0:
+                return (p1, p2)
+            if 36.0 <= p2 <= 46.0 and 55.0 <= p1 <= 75.0:
+                return (p2, p1)
+            if -90.0 <= p1 <= 90.0 and -180.0 <= p2 <= 180.0:
+                return (p1, p2)
+
+        return None
+
+    @staticmethod
+    def get_clean_office_address(raw_address: str | None) -> str:
+        """Return human-readable address text with raw URLs stripped out."""
+        if not raw_address:
+            return ""
+        cleaned = re.sub(r"https?://\S+", "", raw_address).strip()
+        cleaned = re.sub(r"\n{2,}", "\n", cleaned).strip()
+        return cleaned or raw_address
+
+    @classmethod
+    def format_office_address_text(cls, settings_record: OrgSettings, lang: str = "uz") -> str:
         """Format dynamic office address, contact phone, and working hours from admin settings."""
+        clean_addr = cls.get_clean_office_address(settings_record.office_address)
         if lang == "ru":
             return (
                 "🏢 <b>Информация о нашем офисе:</b>\n\n"
-                f"📍 <b>Адрес:</b> {settings_record.office_address}\n"
+                f"📍 <b>Адрес:</b> {clean_addr}\n"
                 f"📞 <b>Телефон:</b> {settings_record.contact_phone}\n"
                 f"⏰ <b>График работы:</b> {settings_record.working_hours}\n\n"
                 "<i>Вы можете посетить наш офис в рабочее время или связаться с нами по телефону.</i>"
             )
         return (
             "🏢 <b>Bizning ofisimiz ma'lumotlari:</b>\n\n"
-            f"📍 <b>Manzil:</b> {settings_record.office_address}\n"
+            f"📍 <b>Manzil:</b> {clean_addr}\n"
             f"📞 <b>Telefon:</b> {settings_record.contact_phone}\n"
             f"⏰ <b>Ish vaqti:</b> {settings_record.working_hours}\n\n"
             "<i>Ish vaqtida ofisimizga tashrif buyurishingiz yoki huquqshunos bilan bog'lanishingiz mumkin.</i>"
@@ -154,11 +204,12 @@ class OrgSettingsService:
     ) -> str:
         """Format payment confirmation notification, revealing office address ONLY for office consultation."""
         if cls.is_office_service_ref(transaction_ref):
+            clean_addr = cls.get_clean_office_address(settings_record.office_address)
             if lang == "ru":
                 return (
                     "✅ <b>Ваш платеж успешно подтвержден!</b>\n\n"
                     f"💼 Услуга: <b>{transaction_ref or 'Консультация с юристом в офисе'}</b>\n\n"
-                    f"📍 <b>Адрес нашего офиса:</b> {settings_record.office_address}\n"
+                    f"📍 <b>Адрес нашего офиса:</b> {clean_addr}\n"
                     f"📞 <b>Телефон для связи:</b> {settings_record.contact_phone}\n"
                     f"⏰ <b>График работы:</b> {settings_record.working_hours}\n\n"
                     "Юрист свяжется с вами в ближайшее время для согласования точного времени встречи в офисе. "
@@ -167,7 +218,7 @@ class OrgSettingsService:
             return (
                 "✅ <b>To'lovingiz muvaffaqiyatli tasdiqlandi!</b>\n\n"
                 f"💼 Xizmat: <b>{transaction_ref or 'Ofisda yurist konsultatsiyasi'}</b>\n\n"
-                f"📍 <b>Ofisimiz manzili:</b> {settings_record.office_address}\n"
+                f"📍 <b>Ofisimiz manzili:</b> {clean_addr}\n"
                 f"📞 <b>Aloqa telefoni:</b> {settings_record.contact_phone}\n"
                 f"⏰ <b>Qabul vaqti:</b> {settings_record.working_hours}\n\n"
                 "Huquqshunosimiz tez orada siz bilan bog'lanib, uchrashuvning aniq soatini kelishib oladi. "
@@ -185,3 +236,40 @@ class OrgSettingsService:
             f"💼 Xizmat: <b>{transaction_ref or 'Yuridik xizmat'}</b>\n\n"
             "To'lov qabul qilindi. Tez orada mas'ul huquqshunosimiz siz bilan bog'lanib, xizmat ko'rsatishni boshlaydi."
         )
+
+    @classmethod
+    async def send_office_location(
+        cls,
+        bot: Any,
+        chat_id: int,
+        settings_record: OrgSettings,
+        business_connection_id: str | None = None,
+    ) -> bool:
+        """Send native Telegram square location map card if coordinates exist in settings."""
+        coords = cls.extract_office_coordinates(settings_record.office_address)
+        if not coords:
+            return False
+        lat, lon = coords
+        try:
+            if business_connection_id:
+                await bot.send_location(
+                    chat_id=chat_id,
+                    latitude=lat,
+                    longitude=lon,
+                    business_connection_id=business_connection_id,
+                )
+            else:
+                await bot.send_location(
+                    chat_id=chat_id,
+                    latitude=lat,
+                    longitude=lon,
+                )
+            return True
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Could not send native location to chat %s: %s", chat_id, e)
+            try:
+                await bot.send_location(chat_id=chat_id, latitude=lat, longitude=lon)
+                return True
+            except Exception as e2:  # noqa: BLE001
+                logger.warning("Fallback send_location failed for chat %s: %s", chat_id, e2)
+                return False

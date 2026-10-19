@@ -317,9 +317,15 @@ async def process_aggregated_inquiry(
             if has_paid:
                 org_settings = await OrgSettingsService.get_settings(session)
                 addr_text = OrgSettingsService.format_office_address_text(org_settings, lang)
+                await last_message.answer(addr_text)
+                await OrgSettingsService.send_office_location(
+                    bot=bot,
+                    chat_id=fresh_user.telegram_id,
+                    settings_record=org_settings,
+                )
             else:
                 addr_text = OrgSettingsService.format_office_service_notice(lang)
-            await last_message.answer(addr_text)
+                await last_message.answer(addr_text)
             await ChatService.log_message(
                 session=session,
                 user_id=fresh_user.id,

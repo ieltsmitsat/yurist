@@ -148,6 +148,15 @@ async def update_transaction_status(
                     except Exception as e:  # noqa: BLE001
                         logging.getLogger(__name__).warning("Could not send payment confirmation to %s: %s", user.telegram_id, e)
 
+                # If this is an office consultation, also send native Telegram 4-burchak location map
+                if OrgSettingsService.is_office_service_ref(tx.transaction_ref):
+                    await OrgSettingsService.send_office_location(
+                        bot=bot,
+                        chat_id=user.telegram_id,
+                        settings_record=org_settings,
+                        business_connection_id=getattr(user, "business_connection_id", None),
+                    )
+
             elif tx.payment_status == "failed":
                 text = (
                     "⚠️ <b>To'lovni tekshirishda muammo yuzaga keldi</b>\n\n"

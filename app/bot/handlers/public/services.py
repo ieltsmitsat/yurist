@@ -421,6 +421,15 @@ async def handle_payment_approval(
             except Exception as e:  # noqa: BLE001
                 logger.warning("Could not send payment confirmation to user %s: %s", target_user.telegram_id, e)
 
+        # If this is an office consultation, also send native Telegram 4-burchak location map
+        if OrgSettingsService.is_office_service_ref(service_ref):
+            await OrgSettingsService.send_office_location(
+                bot=bot,
+                chat_id=target_user.telegram_id,
+                settings_record=org_settings,
+                business_connection_id=getattr(target_user, "business_connection_id", None),
+            )
+
     # 2. Update message in group topic with "Ish bajarildi" button
     await callback.answer("To'lov tasdiqlandi! Mijozga xabar yetkazildi.", show_alert=True)
     if isinstance(callback.message, Message):
