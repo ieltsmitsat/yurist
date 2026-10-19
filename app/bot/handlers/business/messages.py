@@ -8,7 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.redis import BusinessPauseManager
-from app.services.access_service import AccessService
 from app.services.ai.llm_client import LLMService
 from app.services.chat_service import ChatService
 from app.services.user_service import UserService
@@ -50,11 +49,10 @@ async def handle_business_message(
     client_name = message.chat.full_name or "Mijoz"
     client_user, _ = await UserService.get_or_create_user(session, client_tg_id, full_name=client_name)
 
-    # 2. Extract text or transcribe voice
-    # Support multiple lawyers/admins for manual takeover
-    lawyer_ids = await AccessService.get_active_lawyer_ids(session)
-    admin_ids = await AccessService.get_active_admin_ids(session)
-    is_lawyer = sender_id in (lawyer_ids | admin_ids)
+    # In Telegram Business (1-on-1 private chat):
+    # - If sender_id == chat_id: incoming message from the client to the business account
+    # - If sender_id != chat_id: outgoing manual message from the business account owner (lawyer)
+    is_lawyer = (sender_id != chat_id)
     question_text = ""
     is_voice = False
 
@@ -62,12 +60,12 @@ async def handle_business_message(
         question_text = message.text
     elif message.voice:
         is_voice = True
-        if not is_lawyer: # We don't need to transcribe lawyer's voice notes sent manually
+        if not is_lawyer:  # We don't need to transcribe lawyer's voice notes sent manually
             from pathlib import Path
             from tempfile import NamedTemporaryFile
 
             from app.services.ai.speech import SpeechService
-            
+
             speech_service = SpeechService()
             with NamedTemporaryFile(suffix=".ogg", delete=False) as temp_file:
                 temp_path = Path(temp_file.name)
@@ -105,7 +103,14 @@ async def handle_business_message(
         telegram_message_id=message.message_id,
     )
 
-    # 4. Instant Manual Takeover Mechanism:
+    # 4. Instant Manual Takeover Mechanism & Unpause commands:
+    clean_cmd = question_text.strip().lower()
+    if is_lawyer and clean_cmd in ("/unpause", "/ai_on", "/ai", "ai yoq", "ai"):
+        if redis_client:
+            await BusinessPauseManager.resume(chat_id, redis_client)
+        await message.answer(text="✅ Sun'iy intellekt yordamchisi ushbu chatda qayta faollashtirildi!")
+        return
+
     if is_lawyer:
         if redis_client:
             await BusinessPauseManager.set_paused(
@@ -113,7 +118,7 @@ async def handle_business_message(
                 redis_client=redis_client,
                 duration_seconds=settings.BUSINESS_TAKEOVER_PAUSE_SECONDS,
             )
-            logger.info("Lawyer manually replied in chat %d; paused AI for 30 minutes", chat_id)
+            logger.info("Lawyer manually replied in chat %d; paused AI for %d seconds", chat_id, settings.BUSINESS_TAKEOVER_PAUSE_SECONDS)
         return
 
     # 5. Client message: Check if chat is currently paused by lawyer takeover
@@ -132,9 +137,16 @@ async def handle_business_message(
             )
             await asyncio.sleep(typing_delay)
 
+            history_context = await ChatService.get_recent_history_context(
+                session=session,
+                user_id=client_user.id,
+                limit=10,
+                language=client_user.language or "uz",
+            )
             analysis = await llm_service.analyze_legal_inquiry(
                 question=question_text,
-                language="uz",
+                language=client_user.language or "uz",
+                conversation_history=history_context,
             )
 
             await message.answer(text=analysis.response_text)

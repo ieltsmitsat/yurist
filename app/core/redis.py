@@ -66,6 +66,15 @@ async def get_redis_client() -> Any:
             await client.ping()
             _redis_client = client
             logger.info("Connected to Redis server at: %s", settings.REDIS_URL)
+
+            # Clear any leftover business pauses on deploy so testing is not blocked
+            try:
+                pause_keys = await client.keys(f"{BusinessPauseManager.PAUSE_KEY_PREFIX}:*")
+                if pause_keys:
+                    await client.delete(*pause_keys)
+                    logger.info("Cleared %d existing business pause keys on startup", len(pause_keys))
+            except Exception as pause_err:  # noqa: BLE001
+                logger.debug("Could not clear pause keys on startup: %s", pause_err)
         except Exception as e:  # noqa: BLE001
             logger.warning(
                 "Redis server not accessible at %s (%s). Using local in-memory fallback.",
