@@ -56,9 +56,9 @@ class InquiryService:
 
         org_settings = await OrgSettingsService.get_settings(session)
         firm_profile = (
-            f"Ofis manzili: {org_settings.office_address}\n"
-            f"Telefon: {org_settings.contact_phone}\n"
-            f"Ish vaqti: {org_settings.working_hours}"
+            f"Aloqa telefoni: {org_settings.contact_phone}\n"
+            f"Ish vaqti: {org_settings.working_hours}\n"
+            "Ofis qoidasi: Aniq manzil va uchrashuv faqat «Malakali yurist va advokatdan ofisda ko'rishib konsultatsiya olish» xizmati uchun to'lov tasdiqlangach taqdim etiladi."
         )
 
         # Generate legal response with Undetectable AI Persona and conversation history

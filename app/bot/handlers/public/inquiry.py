@@ -310,10 +310,15 @@ async def process_aggregated_inquiry(
 
         # Check office address / location inquiry
         from app.services.org_settings_service import OrgSettingsService
+        from app.services.payment_service import PaymentService
 
         if OrgSettingsService.is_office_address_inquiry(combined_text):
-            org_settings = await OrgSettingsService.get_settings(session)
-            addr_text = OrgSettingsService.format_office_address_text(org_settings, lang)
+            has_paid = await PaymentService.has_confirmed_office_consultation(session, fresh_user.id)
+            if has_paid:
+                org_settings = await OrgSettingsService.get_settings(session)
+                addr_text = OrgSettingsService.format_office_address_text(org_settings, lang)
+            else:
+                addr_text = OrgSettingsService.format_office_service_notice(lang)
             await last_message.answer(addr_text)
             await ChatService.log_message(
                 session=session,

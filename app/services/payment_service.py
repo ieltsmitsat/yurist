@@ -201,12 +201,33 @@ class PaymentService:
         tx = res.scalar_one_or_none()
         if tx and tx.payment_status != "completed":
             tx.payment_status = "completed"
-            if transaction_ref:
+            if transaction_ref and not tx.transaction_ref:
                 tx.transaction_ref = transaction_ref
             await session.commit()
             await session.refresh(tx)
             logger.info("Confirmed payment for transaction #%d", tx.id)
         return tx
+
+    @classmethod
+    async def has_confirmed_office_consultation(
+        cls, session: AsyncSession, user_id: int
+    ) -> bool:
+        """Check if user has an approved/completed transaction for office consultation."""
+        from app.services.org_settings_service import OrgSettingsService
+
+        stmt = (
+            select(Transaction)
+            .where(
+                Transaction.user_id == user_id,
+                Transaction.payment_status.in_(["completed", "fulfilled"]),
+            )
+        )
+        res = await session.execute(stmt)
+        txs = res.scalars().all()
+        for tx in txs:
+            if OrgSettingsService.is_office_service_ref(tx.transaction_ref):
+                return True
+        return False
 
     @classmethod
     async def get_service_by_type(

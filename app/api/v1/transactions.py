@@ -125,17 +125,28 @@ async def update_transaction_status(
             lang = user.language or "uz"
 
             if tx.payment_status == "completed":
-                text = (
-                    "✅ <b>To'lovingiz muvaffaqiyatli tasdiqlandi!</b>\n\n"
-                    "To'lov qabul qilindi. Tez orada huquqshunoslarimiz siz bilan aloqaga chiqishadi."
-                    if lang == "uz"
-                    else "✅ <b>Ваш платеж успешно подтвержден!</b>\n\n"
-                    "Оплата принята. В ближайшее время наши юристы свяжутся с вами."
+                from app.services.org_settings_service import OrgSettingsService
+
+                org_settings = await OrgSettingsService.get_settings(session)
+                text = OrgSettingsService.format_payment_confirmed_text(
+                    transaction_ref=tx.transaction_ref,
+                    settings_record=org_settings,
+                    lang=lang,
                 )
                 try:
-                    await bot.send_message(chat_id=user.telegram_id, text=text)
-                except Exception as e:  # noqa: BLE001
-                    logging.getLogger(__name__).warning("Could not send payment confirmation to %s: %s", user.telegram_id, e)
+                    if getattr(user, "business_connection_id", None):
+                        await bot.send_message(
+                            chat_id=user.telegram_id,
+                            text=text,
+                            business_connection_id=user.business_connection_id,
+                        )
+                    else:
+                        await bot.send_message(chat_id=user.telegram_id, text=text)
+                except Exception:  # noqa: BLE001
+                    try:
+                        await bot.send_message(chat_id=user.telegram_id, text=text)
+                    except Exception as e:  # noqa: BLE001
+                        logging.getLogger(__name__).warning("Could not send payment confirmation to %s: %s", user.telegram_id, e)
 
             elif tx.payment_status == "failed":
                 text = (

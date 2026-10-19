@@ -382,7 +382,6 @@ async def handle_payment_approval(
             target_tx = await PaymentService.confirm_payment(
                 session=session,
                 transaction_id=tx_id,
-                transaction_ref=f"Approved by {admin_name}",
             )
             if target_tx:
                 stmt_u = select(User).where(User.id == target_tx.user_id)
@@ -398,12 +397,14 @@ async def handle_payment_approval(
     # 1. Notify client in private bot chat
     if target_user and target_user.telegram_id:
         user_lang = target_user.language or "uz"
-        client_msg = (
-            "✅ <b>To'lovingiz muvaffaqiyatli tasdiqlandi!</b>\n\n"
-            "To'lov qabul qilindi. Tez orada mas'ul huquqshunosimiz siz bilan bog'lanib, xizmat ko'rsatishni boshlaydi."
-            if user_lang == "uz"
-            else "✅ <b>Ваш платеж успешно подтвержден!</b>\n\n"
-            "Оплата принята. В ближайшее время юрист свяжется с вами для оказания услуги."
+        from app.services.org_settings_service import OrgSettingsService
+
+        org_settings = await OrgSettingsService.get_settings(session)
+        service_ref = target_tx.transaction_ref if target_tx else None
+        client_msg = OrgSettingsService.format_payment_confirmed_text(
+            transaction_ref=service_ref,
+            settings_record=org_settings,
+            lang=user_lang,
         )
         try:
             if getattr(target_user, "business_connection_id", None):

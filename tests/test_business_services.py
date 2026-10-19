@@ -506,3 +506,62 @@ def test_consultation_intent_triggers_catalog():
     assert is_general_services_inquiry("xizmatdan foydalanaman") is True
     assert is_general_services_inquiry("xizmatlardan foydalanmoqchiman") is True
     assert is_general_services_inquiry("konsultatsiya") is True
+
+
+def test_office_service_address_privacy_and_confirmation():
+    from app.db.models.org_settings import OrgSettings
+    from app.services.org_settings_service import OrgSettingsService
+
+    # 1. Test is_office_service_ref
+    office_title = "Malakali yurist va advokatdan ofisda korishib konsultatsiya olish"
+    assert OrgSettingsService.is_office_service_ref(office_title) is True
+    assert OrgSettingsService.is_office_service_ref("Ofisda yurist konsultatsiyasi") is True
+    assert OrgSettingsService.is_office_service_ref("Telegram orqali konsultatsiya") is False
+    assert OrgSettingsService.is_office_service_ref("Shartnoma auditi") is False
+
+    # 2. Test format_office_service_notice (address withheld before payment)
+    notice_uz = OrgSettingsService.format_office_service_notice("uz")
+    assert "to'lov" in notice_uz.lower()
+    assert "Malakali yurist va advokatdan ofisda ko'rishib konsultatsiya olish" in notice_uz
+
+    notice_ru = OrgSettingsService.format_office_service_notice("ru")
+    assert "оплата" in notice_ru.lower() or "оплату" in notice_ru.lower()
+
+    # 3. Test format_payment_confirmed_text (address revealed ONLY after payment confirmed for office service)
+    settings_obj = OrgSettings(
+        office_address="Toshkent sh., Chilonzor tumani, S mavze 1A/2",
+        contact_phone="+998 (94) 304 27 72",
+        working_hours="09:00 - 19:00",
+    )
+
+    # Office service -> MUST contain office address
+    conf_office = OrgSettingsService.format_payment_confirmed_text(office_title, settings_obj, "uz")
+    assert "Toshkent sh., Chilonzor tumani, S mavze 1A/2" in conf_office
+    assert "+998 (94) 304 27 72" in conf_office
+
+    # Non-office service -> MUST NOT reveal office address
+    conf_online = OrgSettingsService.format_payment_confirmed_text("Online konsultatsiya", settings_obj, "uz")
+    assert "Toshkent sh., Chilonzor tumani, S mavze 1A/2" not in conf_online
+
+
+@pytest.mark.asyncio
+async def test_has_confirmed_office_consultation_db():
+    async with TestingSessionLocal() as session:
+        user, _ = await UserService.get_or_create_user(session, telegram_id=999888, full_name="Vali")
+
+        # Before any payment
+        assert await PaymentService.has_confirmed_office_consultation(session, user.id) is False
+
+        # Create pending office transaction
+        tx = await PaymentService.create_transaction(
+            session=session,
+            user=user,
+            amount="100000",
+            payment_method="p2p_card",
+            transaction_ref="Malakali yurist va advokatdan ofisda korishib konsultatsiya olish",
+        )
+        assert await PaymentService.has_confirmed_office_consultation(session, user.id) is False
+
+        # Confirm payment
+        await PaymentService.confirm_payment(session, tx.id)
+        assert await PaymentService.has_confirmed_office_consultation(session, user.id) is True

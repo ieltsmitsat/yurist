@@ -563,8 +563,12 @@ async def handle_business_message(
 
     # 2.5. Check if user is asking about office address / location
     if OrgSettingsService.is_office_address_inquiry(question_text):
-        org_settings = await OrgSettingsService.get_settings(session)
-        addr_text = OrgSettingsService.format_office_address_text(org_settings, client_user.language)
+        has_paid = await PaymentService.has_confirmed_office_consultation(session, client_user.id)
+        if has_paid:
+            org_settings = await OrgSettingsService.get_settings(session)
+            addr_text = OrgSettingsService.format_office_address_text(org_settings, client_user.language)
+        else:
+            addr_text = OrgSettingsService.format_office_service_notice(client_user.language)
         await message.answer(text=addr_text)
         await ChatService.log_message(
             session=session,

@@ -531,7 +531,7 @@ async def test_helplines_reply_button_handlers():
 
 @pytest.mark.asyncio
 async def test_dynamic_cta_and_service_fulfillment():
-    from unittest.mock import AsyncMock, MagicMock
+    from unittest.mock import AsyncMock, MagicMock, patch
 
     from aiogram.types import Message
 
@@ -607,8 +607,16 @@ async def test_dynamic_cta_and_service_fulfillment():
     orig_confirm = PaymentService.confirm_payment
     PaymentService.confirm_payment = AsyncMock(return_value=tx)
 
+    from app.db.models.org_settings import OrgSettings
+    settings_mock = OrgSettings(
+        office_address="Toshkent",
+        contact_phone="+998901234567",
+        working_hours="09:00 - 18:00",
+    )
+
     try:
-        await handle_payment_approval(approval_cb, session, bot)
+        with patch("app.services.org_settings_service.OrgSettingsService.get_settings", new_callable=AsyncMock, return_value=settings_mock):
+            await handle_payment_approval(approval_cb, session, bot)
         assert approval_cb.message.edit_caption.called
         caption_updated = approval_cb.message.edit_caption.call_args[1]["caption"]
         assert "TO'LOV TASDIQLANDI" in caption_updated
