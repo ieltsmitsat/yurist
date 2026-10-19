@@ -518,6 +518,39 @@ def test_consultation_intent_triggers_catalog():
     assert is_general_services_inquiry("какие услуги") is True
 
 
+def test_personal_identity_inquiry_detection_and_prompts():
+    from app.bot.handlers.business.messages import is_personal_identity_inquiry
+    from app.services.ai.prompts import PromptManager
+
+    # 1. Detection of personal questions
+    assert is_personal_identity_inquiry("kimsiz") is True
+    assert is_personal_identity_inquiry("kimsan") is True
+    assert is_personal_identity_inquiry("kim bu") is True
+    assert is_personal_identity_inquiry("o'zingiz haqingizda gapiring") is True
+    assert is_personal_identity_inquiry("yoshingiz nechida?") is True
+    assert is_personal_identity_inquiry("qayerdansiz") is True
+    assert is_personal_identity_inquiry("uylanganmisiz?") is True
+    assert is_personal_identity_inquiry("shaxsiy ma'lumotlaringizni bering") is True
+    assert is_personal_identity_inquiry("кто вы?") is True
+    assert is_personal_identity_inquiry("расскажите о себе") is True
+
+    # 2. Non-personal legal questions must NOT trigger personal inquiry
+    assert is_personal_identity_inquiry("Aliment talab qilish tartibi qanday?") is False
+    assert is_personal_identity_inquiry("Menga advokat kerak") is False
+    assert is_personal_identity_inquiry("Xizmat narxi qancha?") is False
+
+    # 3. Prompt contains lawyer name Iqboljon and personal rejection message
+    prompts = PromptManager.get_all()
+    uz_prompt = prompts["PERSONA_SYSTEM_PROMPT_UZ"]
+    assert "Iqboljon" in uz_prompt
+    assert "Afsusku shaxsiy savollaringizga javob bera olmayman. Agar huquqiuy masalada savollaringiz bo'lsa batafsil yozib qoldiring" in uz_prompt
+
+    ru_prompt = prompts["PERSONA_SYSTEM_PROMPT_RU"]
+    assert "Икболжон" in ru_prompt
+    assert "К сожалению, я не могу отвечать на личные вопросы" in ru_prompt
+
+
+
 def test_office_service_address_privacy_and_confirmation():
     from app.db.models.org_settings import OrgSettings
     from app.services.org_settings_service import OrgSettingsService

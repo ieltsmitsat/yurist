@@ -199,6 +199,72 @@ def is_general_services_inquiry(text: str) -> bool:
     return False
 
 
+def is_personal_identity_inquiry(text: str) -> bool:
+    """Check if the user is asking about the lawyer's personal identity, background, or personal life."""
+    q = text.lower().strip()
+    clean_no_punct = re.sub(r"[^\w\s]", " ", q)
+    words = clean_no_punct.split()
+
+    if not words:
+        return False
+
+    direct_patterns = [
+        "kimsiz",
+        "kimsan",
+        "kim bu",
+        "kim siz",
+        "kim san",
+        "o'zingiz haqingizda",
+        "ozingiz haqingizda",
+        "o'zingiz haqingizda gapiring",
+        "ozingiz haqingizda gapiring",
+        "o'zingiz haqingizda ma'lumot",
+        "ozingiz haqingizda malumot",
+        "haqingizda gapiring",
+        "haqingizda malumot",
+        "haqingizda ma'lumot",
+        "yoshingiz nechida",
+        "yoshingiz necha",
+        "yoshing nechida",
+        "qayerdansiz",
+        "qattansiz",
+        "qayerliksiz",
+        "qayerdansan",
+        "uylanganmisiz",
+        "oilalimisiz",
+        "oilangiz",
+        "shaxsiy hayot",
+        "shaxsiy ma'lumot",
+        "shaxsiy malumot",
+        "shaxsiy savol",
+        "кто вы",
+        "кто ты",
+        "кто это",
+        "расскажи о себе",
+        "расскажите о себе",
+        "сколько вам лет",
+        "сколько тебе лет",
+        "откуда вы",
+        "откуда ты",
+        "где живешь",
+        "где вы живете",
+        "женат",
+        "замужем",
+        "личная жизнь",
+        "личные данные",
+    ]
+
+    if any(p in q for p in direct_patterns):
+        return True
+
+    if len(words) <= 4:
+        if any(w in words for w in ["kimsiz", "kimsan"]) or ("kim" in words and any(w in words for w in ["bu", "siz", "san", "u"])):
+            return True
+        if "кто" in words and any(w in words for w in ["вы", "ты", "это"]):
+            return True
+
+    return False
+
 
 def format_services_catalog_text(services: Sequence[Service], lang: str = "uz") -> str:
     """Format rich catalog of active legal services for business chat."""
@@ -700,6 +766,24 @@ async def handle_business_message(
                 tx_id=recent_tx_id,
             )
             return
+
+    # 2.7. Check if user is asking personal questions about the lawyer's identity/personal life
+    if is_personal_identity_inquiry(question_text):
+        personal_reply = (
+            "Afsusku shaxsiy savollaringizga javob bera olmayman. Agar huquqiuy masalada savollaringiz bo'lsa batafsil yozib qoldiring"
+            if client_user.language == "uz"
+            else "К сожалению, я не могу отвечать на личные вопросы. Если у вас есть правовые вопросы, подробно опишите вашу ситуацию."
+        )
+        await message.answer(text=personal_reply)
+        await ChatService.log_message(
+            session=session,
+            user_id=client_user.id,
+            telegram_id=bot.id,
+            sender_type="bot",
+            text=personal_reply,
+            is_business=True,
+        )
+        return
 
     # 3. Check if user is inquiring generally about services catalog or pricing
     if is_general_services_inquiry(question_text):

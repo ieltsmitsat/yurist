@@ -375,9 +375,29 @@ async def process_aggregated_inquiry(
                 )
                 return
 
-        # Check general services catalog or consultation request
-        from app.bot.handlers.business.messages import is_general_services_inquiry
+        # Check personal identity inquiry
+        from app.bot.handlers.business.messages import (
+            is_general_services_inquiry,
+            is_personal_identity_inquiry,
+        )
 
+        if is_personal_identity_inquiry(combined_text):
+            personal_reply = (
+                "Afsusku shaxsiy savollaringizga javob bera olmayman. Agar huquqiuy masalada savollaringiz bo'lsa batafsil yozib qoldiring"
+                if lang == "uz"
+                else "К сожалению, я не могу отвечать на личные вопросы. Если у вас есть правовые вопросы, подробно опишите вашу ситуацию."
+            )
+            await last_message.answer(personal_reply)
+            await ChatService.log_message(
+                session=session,
+                user_id=fresh_user.id,
+                telegram_id=fresh_user.telegram_id,
+                sender_type="bot",
+                text=personal_reply,
+            )
+            return
+
+        # Check general services catalog or consultation request
         if is_general_services_inquiry(combined_text):
             from app.bot.handlers.public.services import handle_services_menu
 
