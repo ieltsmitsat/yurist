@@ -363,3 +363,41 @@ def helplines_categories_reply_kb(
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
 
+def office_time_slots_kb(tx_id: int | None = None, lang: str = "uz") -> InlineKeyboardMarkup:
+    """Generate time slot selection keyboard for confirmed office consultation appointments."""
+    tx_suffix = f":{tx_id}" if tx_id else ""
+    if lang == "ru":
+        return InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="🌅 С 09:00 до 12:00",
+                        callback_data=f"office_slot:morning{tx_suffix}",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="🌆 С 14:00 до 19:00",
+                        callback_data=f"office_slot:afternoon{tx_suffix}",
+                    )
+                ],
+            ]
+        )
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🌅 09:00 dan 12:00 gacha",
+                    callback_data=f"office_slot:morning{tx_suffix}",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🌆 14:00 dan 19:00 gacha",
+                    callback_data=f"office_slot:afternoon{tx_suffix}",
+                )
+            ],
+        ]
+    )
+
+

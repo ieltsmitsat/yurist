@@ -309,6 +309,7 @@ async def process_aggregated_inquiry(
             return
 
         # Check office address / location inquiry
+        from app.db.models.transaction import Transaction
         from app.services.org_settings_service import OrgSettingsService
         from app.services.payment_service import PaymentService
 
@@ -334,6 +335,45 @@ async def process_aggregated_inquiry(
                 text=addr_text,
             )
             return
+
+        # Check office visit time slot selection
+        slot_type = OrgSettingsService.detect_office_time_slot(combined_text)
+        if slot_type:
+            has_paid_office = await PaymentService.has_confirmed_office_consultation(session, fresh_user.id)
+            if has_paid_office:
+                stmt_tx = (
+                    select(Transaction)
+                    .where(Transaction.user_id == fresh_user.id)
+                    .where(Transaction.payment_status.in_(["completed", "fulfilled"]))
+                    .order_by(Transaction.id.desc())
+                    .limit(1)
+                )
+                res_tx = await session.execute(stmt_tx)
+                recent_tx = res_tx.scalar_one_or_none()
+                recent_tx_id = recent_tx.id if recent_tx else None
+
+                slot_text, resp_text = await OrgSettingsService.register_office_slot(
+                    session=session,
+                    user_id=fresh_user.id,
+                    slot_type=slot_type,
+                    tx_id=recent_tx_id,
+                )
+                await last_message.answer(resp_text)
+                await ChatService.log_message(
+                    session=session,
+                    user_id=fresh_user.id,
+                    telegram_id=fresh_user.telegram_id,
+                    sender_type="bot",
+                    text=resp_text,
+                )
+                await OrgSettingsService.notify_office_slot_chosen(
+                    bot=bot,
+                    session=session,
+                    user_id=fresh_user.id,
+                    slot_text=slot_text,
+                    tx_id=recent_tx_id,
+                )
+                return
 
         # Check general services catalog or consultation request
         from app.bot.handlers.business.messages import is_general_services_inquiry

@@ -406,18 +406,25 @@ async def handle_payment_approval(
             settings_record=org_settings,
             lang=user_lang,
         )
+        slots_kb = None
+        if OrgSettingsService.is_office_service_ref(service_ref):
+            from app.bot.keyboards.keyboards import office_time_slots_kb
+
+            slots_kb = office_time_slots_kb(tx_id=target_tx.id if target_tx else None, lang=user_lang)
+
         try:
             if getattr(target_user, "business_connection_id", None):
                 await bot.send_message(
                     chat_id=target_user.telegram_id,
                     text=client_msg,
+                    reply_markup=slots_kb,
                     business_connection_id=target_user.business_connection_id,
                 )
             else:
-                await bot.send_message(chat_id=target_user.telegram_id, text=client_msg)
+                await bot.send_message(chat_id=target_user.telegram_id, text=client_msg, reply_markup=slots_kb)
         except Exception:  # noqa: BLE001
             try:
-                await bot.send_message(chat_id=target_user.telegram_id, text=client_msg)
+                await bot.send_message(chat_id=target_user.telegram_id, text=client_msg, reply_markup=slots_kb)
             except Exception as e:  # noqa: BLE001
                 logger.warning("Could not send payment confirmation to user %s: %s", target_user.telegram_id, e)
 
@@ -693,4 +700,68 @@ async def handle_payment_rejection(
                 text=callback.message.text + status_note,
                 reply_markup=None,
             )
+
+
+@router.callback_query(F.data.startswith("office_slot:"))
+async def handle_office_slot_selection(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    bot: Bot,
+    user: User | None = None,
+) -> None:
+    """Handle client clicking an office visit time slot button."""
+    if not callback.data:
+        return
+
+    parts = callback.data.split(":")
+    slot_type = parts[1] if len(parts) > 1 else "morning"
+    tx_id_str = parts[2] if len(parts) > 2 else None
+    tx_id = int(tx_id_str) if (tx_id_str and tx_id_str.isdigit()) else None
+
+    # Resolve user
+    client_user = user
+    if not client_user and callback.from_user:
+        client_user, _ = await UserService.get_or_create_user(
+            session=session,
+            telegram_id=callback.from_user.id,
+            full_name=callback.from_user.full_name,
+        )
+
+    if not client_user:
+        await callback.answer("Foydalanuvchi aniqlanmadi.", show_alert=True)
+        return
+
+    from app.services.org_settings_service import OrgSettingsService
+
+    slot_text, resp_text = await OrgSettingsService.register_office_slot(
+        session=session,
+        user_id=client_user.id,
+        slot_type=slot_type,
+        tx_id=tx_id,
+    )
+
+    await callback.answer("Tanlangan vaqt qabul qilindi!", show_alert=False)
+
+    # Edit message to remove inline keyboard so it cannot be double clicked
+    if isinstance(callback.message, Message):
+        try:
+            await callback.message.edit_reply_markup(reply_markup=None)
+        except Exception:  # noqa: BLE001, S110
+            pass
+        await callback.message.answer(text=resp_text)
+    elif client_user.telegram_id:
+        try:
+            await bot.send_message(chat_id=client_user.telegram_id, text=resp_text)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Failed sending office slot response to %s: %s", client_user.telegram_id, e)
+
+    # Notify lawyer/admin group
+    await OrgSettingsService.notify_office_slot_chosen(
+        bot=bot,
+        session=session,
+        user_id=client_user.id,
+        slot_text=slot_text,
+        tx_id=tx_id,
+    )
+
 

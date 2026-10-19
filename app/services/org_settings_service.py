@@ -212,8 +212,8 @@ class OrgSettingsService:
                     f"📍 <b>Адрес нашего офиса:</b> {clean_addr}\n"
                     f"📞 <b>Телефон для связи:</b> {settings_record.contact_phone}\n"
                     f"⏰ <b>График работы:</b> {settings_record.working_hours}\n\n"
-                    "Юрист свяжется с вами в ближайшее время для согласования точного времени встречи в офисе. "
-                    "Ждем вас в нашем офисе!"
+                    "⏰ <b>Пожалуйста, выберите удобное время визита:</b>\n"
+                    "(Нажмите одну из кнопок ниже)"
                 )
             return (
                 "✅ <b>To'lovingiz muvaffaqiyatli tasdiqlandi!</b>\n\n"
@@ -221,8 +221,8 @@ class OrgSettingsService:
                 f"📍 <b>Ofisimiz manzili:</b> {clean_addr}\n"
                 f"📞 <b>Aloqa telefoni:</b> {settings_record.contact_phone}\n"
                 f"⏰ <b>Qabul vaqti:</b> {settings_record.working_hours}\n\n"
-                "Huquqshunosimiz tez orada siz bilan bog'lanib, uchrashuvning aniq soatini kelishib oladi. "
-                "Sizni ofisimizda kutib qolamiz!"
+                "⏰ <b>Iltimos, o'zingizga qulay tashrif vaqtini tanlang:</b>\n"
+                "(Quyidagi tugmalardan birini bosing)"
             )
 
         if lang == "ru":
@@ -273,3 +273,147 @@ class OrgSettingsService:
             except Exception as e2:  # noqa: BLE001
                 logger.warning("Fallback send_location failed for chat %s: %s", chat_id, e2)
                 return False
+
+    @classmethod
+    def detect_office_time_slot(cls, text: str) -> str | None:
+        """Detect whether user text specifies morning (09:00-12:00) or afternoon (14:00-19:00) slot."""
+        q = text.lower().strip()
+
+        # 1. Direct interval matching
+        if any(p in q for p in ["09:00 dan 12:00", "09:00-12:00", "9:00 dan 12:00", "9:00-12:00", "с 09:00 до 12:00"]):
+            return "morning"
+        if any(p in q for p in ["14:00 dan 19:00", "14:00-19:00", "с 14:00 до 19:00"]):
+            return "afternoon"
+
+        # 2. Keywords and hours with word boundary check
+        has_morning = (
+            any(k in q for k in ["ertalab", "tushgacha", "утром", "до обеда"])
+            or bool(re.search(r"\b(?:0?9|10|11|12):00\b", q))
+        )
+        has_afternoon = (
+            any(k in q for k in ["tushdan keyin", "kechqurun", "abeddan keyin", "после обеда", "вечером"])
+            or bool(re.search(r"\b(?:14|15|16|17|18|19):00\b", q))
+        )
+
+        if has_morning and not has_afternoon:
+            return "morning"
+        if has_afternoon and not has_morning:
+            return "afternoon"
+        return None
+
+
+    @classmethod
+    def format_slot_confirmation(cls, slot_type: str, lang: str = "uz") -> tuple[str, str]:
+        """Return human-readable slot text and confirmation reply message."""
+        if slot_type == "morning":
+            slot_text = "09:00 dan 12:00 gacha" if lang == "uz" else "с 09:00 до 12:00"
+        else:
+            slot_text = "14:00 dan 19:00 gacha" if lang == "uz" else "с 14:00 до 19:00"
+
+        if lang == "ru":
+            resp_text = (
+                "✅ <b>Время визита успешно зарегистрировано!</b>\n\n"
+                f"Вы успешно записаны на прием в нашем офисе на интервал <b>{slot_text}</b>.\n\n"
+                "🤝 <b>Мы с нетерпением ждем вас в нашем офисе!</b> "
+                "Наш юрист и адвокат будет полностью подготовлен к встрече с вами."
+            )
+        else:
+            resp_text = (
+                "✅ <b>Tashrif vaqti muvaffaqiyatli ro'yxatga olindi!</b>\n\n"
+                f"Siz ofisimizga <b>{slot_text}</b> oralig'ida kelish uchun ro'yxatga olindingiz.\n\n"
+                "🤝 <b>Sizni ofisimizda intizorlik bilan kutib qolamiz!</b> "
+                "Malakali huquqshunosimiz siz bilan uchrashuvga to'liq tayyor bo'ladi."
+            )
+        return slot_text, resp_text
+
+    @classmethod
+    async def register_office_slot(
+        cls,
+        session: AsyncSession,
+        user_id: int,
+        slot_type: str,
+        tx_id: int | None = None,
+    ) -> tuple[str, str]:
+        """Register appointment record and return slot_text and confirmation response text."""
+        from datetime import UTC, datetime
+
+        from app.db.models.appointment import Appointment
+        from app.db.models.transaction import Transaction
+        from app.db.models.user import User
+
+        stmt_u = select(User).where(User.id == user_id)
+        res_u = await session.execute(stmt_u)
+        user = res_u.scalar_one_or_none()
+        lang = user.language if user else "uz"
+
+        slot_text, resp_text = cls.format_slot_confirmation(slot_type, lang=lang)
+
+        appt = Appointment(
+            user_id=user_id,
+            appointment_type="offline",
+            status="confirmed",
+            scheduled_at=datetime.now(UTC),
+        )
+        session.add(appt)
+        await session.commit()
+        await session.refresh(appt)
+
+        if tx_id:
+            stmt_tx = select(Transaction).where(Transaction.id == tx_id)
+            res_tx = await session.execute(stmt_tx)
+            tx = res_tx.scalar_one_or_none()
+            if tx:
+                tx.appointment_id = appt.id
+                await session.commit()
+
+        return slot_text, resp_text
+
+    @classmethod
+    async def notify_office_slot_chosen(
+        cls,
+        bot: Any,
+        session: AsyncSession,
+        user_id: int,
+        slot_text: str,
+        tx_id: int | None = None,
+    ) -> None:
+        """Send topic notification to lawyer/admin group about chosen office consultation slot."""
+        from app.core.config import settings
+        from app.db.models.user import User
+        from app.services.access_service import AccessService
+
+        stmt_u = select(User).where(User.id == user_id)
+        res_u = await session.execute(stmt_u)
+        user = res_u.scalar_one_or_none()
+
+        user_name = user.full_name if user else "Noma'lum"
+        user_phone = user.phone_number if user and user.phone_number else "Kiritilmagan"
+        tx_info = f"#{tx_id}" if tx_id else "Mavjud emas"
+
+        notify_msg = (
+            "📅 <b>OFISGA TASHRIF VAQTI TANLANDI</b>\n\n"
+            f"👤 <b>Mijoz:</b> {user_name}\n"
+            f"📱 <b>Telefon:</b> {user_phone}\n"
+            f"⏰ <b>Tanlangan vaqt:</b> <b>{slot_text}</b>\n"
+            f"🔢 <b>Tranzaksiya:</b> {tx_info}"
+        )
+
+        destinations = await AccessService.get_topic_destinations(session, "contact")
+        if not destinations:
+            destinations = await AccessService.get_topic_destinations(session, "payment")
+
+        if destinations:
+            for group_id, topic_id in destinations:
+                try:
+                    await bot.send_message(chat_id=group_id, text=notify_msg, message_thread_id=topic_id)
+                except Exception as e:  # noqa: BLE001
+                    logger.debug("Failed notifying topic %s in group %s: %s", topic_id, group_id, e)
+        else:
+            fallback_target = settings.ADMIN_GROUP_ID or settings.LAWYER_TELEGRAM_ID
+            if fallback_target:
+                try:
+                    await bot.send_message(chat_id=fallback_target, text=notify_msg)
+                except Exception as e:  # noqa: BLE001
+                    logger.debug("Failed notifying fallback group/lawyer: %s", e)
+
+

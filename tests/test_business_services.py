@@ -609,3 +609,76 @@ async def test_native_location_extraction_and_sending():
     assert round(kwargs["latitude"], 4) == 41.2789
     assert round(kwargs["longitude"], 4) == 69.2020
     assert kwargs["business_connection_id"] == "bc_999"
+
+
+def test_office_time_slots_detection_and_formatting():
+    from app.bot.keyboards.keyboards import office_time_slots_kb
+    from app.services.org_settings_service import OrgSettingsService
+
+    # 1. Test detection
+    assert OrgSettingsService.detect_office_time_slot("09:00 dan 12:00 gacha") == "morning"
+    assert OrgSettingsService.detect_office_time_slot("ertalab soat 10:00 da") == "morning"
+    assert OrgSettingsService.detect_office_time_slot("14:00 dan 19:00 gacha") == "afternoon"
+    assert OrgSettingsService.detect_office_time_slot("tushdan keyin 15:00 da kelaman") == "afternoon"
+    assert OrgSettingsService.detect_office_time_slot("с 09:00 до 12:00") == "morning"
+    assert OrgSettingsService.detect_office_time_slot("с 14:00 до 19:00") == "afternoon"
+
+    # 2. Test formatting
+    slot_text_uz, resp_uz = OrgSettingsService.format_slot_confirmation("morning", "uz")
+    assert "09:00 dan 12:00 gacha" in slot_text_uz
+    assert "intizorlik bilan kutib qolamiz" in resp_uz
+    assert "ro'yxatga olindi" in resp_uz
+
+    slot_text_ru, resp_ru = OrgSettingsService.format_slot_confirmation("afternoon", "ru")
+    assert "14:00" in slot_text_ru
+    assert "с нетерпением ждем вас в нашем офисе" in resp_ru
+
+    # 3. Test keyboard
+    kb = office_time_slots_kb(tx_id=5, lang="uz")
+    assert len(kb.inline_keyboard) == 2
+    assert "09:00 dan 12:00 gacha" in kb.inline_keyboard[0][0].text
+    assert kb.inline_keyboard[0][0].callback_data == "office_slot:morning:5"
+    assert "14:00 dan 19:00 gacha" in kb.inline_keyboard[1][0].text
+    assert kb.inline_keyboard[1][0].callback_data == "office_slot:afternoon:5"
+
+
+@pytest.mark.asyncio
+async def test_register_office_slot_creates_appointment():
+    from sqlalchemy import select
+
+    from app.db.models.appointment import Appointment
+    from app.services.org_settings_service import OrgSettingsService
+
+    async with TestingSessionLocal() as session:
+        user, _ = await UserService.get_or_create_user(session, telegram_id=888777, full_name="Sherzod")
+
+        tx = await PaymentService.create_transaction(
+            session=session,
+            user=user,
+            amount="100000",
+            payment_method="p2p_card",
+            transaction_ref="Malakali yurist va advokatdan ofisda korishib konsultatsiya olish",
+        )
+
+        slot_text, resp_text = await OrgSettingsService.register_office_slot(
+            session=session,
+            user_id=user.id,
+            slot_type="morning",
+            tx_id=tx.id,
+        )
+
+        assert "09:00 dan 12:00 gacha" in slot_text
+        assert "intizorlik bilan kutib qolamiz" in resp_text
+
+        # Verify Appointment in DB
+        stmt_appt = select(Appointment).where(Appointment.user_id == user.id)
+        res_appt = await session.execute(stmt_appt)
+        appt = res_appt.scalar_one_or_none()
+        assert appt is not None
+        assert appt.appointment_type == "offline"
+        assert appt.status == "confirmed"
+
+        # Verify transaction linked
+        await session.refresh(tx)
+        assert tx.appointment_id == appt.id
+

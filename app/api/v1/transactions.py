@@ -133,18 +133,25 @@ async def update_transaction_status(
                     settings_record=org_settings,
                     lang=lang,
                 )
+                slots_kb = None
+                if OrgSettingsService.is_office_service_ref(tx.transaction_ref):
+                    from app.bot.keyboards.keyboards import office_time_slots_kb
+
+                    slots_kb = office_time_slots_kb(tx_id=tx.id, lang=lang)
+
                 try:
                     if getattr(user, "business_connection_id", None):
                         await bot.send_message(
                             chat_id=user.telegram_id,
                             text=text,
+                            reply_markup=slots_kb,
                             business_connection_id=user.business_connection_id,
                         )
                     else:
-                        await bot.send_message(chat_id=user.telegram_id, text=text)
+                        await bot.send_message(chat_id=user.telegram_id, text=text, reply_markup=slots_kb)
                 except Exception:  # noqa: BLE001
                     try:
-                        await bot.send_message(chat_id=user.telegram_id, text=text)
+                        await bot.send_message(chat_id=user.telegram_id, text=text, reply_markup=slots_kb)
                     except Exception as e:  # noqa: BLE001
                         logging.getLogger(__name__).warning("Could not send payment confirmation to %s: %s", user.telegram_id, e)
 
