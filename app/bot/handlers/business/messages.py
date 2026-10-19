@@ -48,12 +48,95 @@ def extract_phone(text: str) -> str | None:
 def is_general_services_inquiry(text: str) -> bool:
     """Check if the user is asking about general services catalog, pricing, or wants consultation."""
     q = text.lower().strip()
-    words = q.split()
+    clean_no_punct = re.sub(r"[^\w\s]", " ", q)
+    words = clean_no_punct.split()
 
-    # Explicit phrases requesting services catalog or consultation
-    explicit_phrases = [
+    if not words:
+        return False
+
+    # 1. Any combination of service-related root + price/cost-related root
+    # Handles typos like: xizmatoz, xizmatiz, xizmat, xizmatlar, qanfha, qancha, nechpul, narx, etc.
+    price_pattern = r"\b(?:narx|qanch|qanfh|qanca|qanqa|nech|pul|summa|baho|qiymat|haq|haqqi|почем|скольк|цен|стоим|прайс|тариф)\w*"
+    service_pattern = r"\b(?:xizm|xzm|konsult|maslahat|advokat|yurist|uslug|услуг|консульт)\w*"
+
+    has_price_word = any(bool(re.search(price_pattern, w)) for w in words)
+    has_service_word = any(bool(re.search(service_pattern, w)) for w in words)
+
+    has_price_phrase = any(
+        phrase in q
+        for phrase in [
+            "necha pul",
+            "nech pul",
+            "qancha turadi",
+            "qancha boladi",
+            "qancha bo'ladi",
+            "qancha ekan",
+            "narxi qanaqa",
+            "narxi qanday",
+            "narxlar qanaqa",
+            "narxlar qanday",
+            "сколько стоит",
+            "какая цена",
+            "какие расценки",
+            "сколько возьмете",
+        ]
+    )
+
+    if (has_price_word or has_price_phrase) and has_service_word:
+        return True
+
+    # 2. Standalone pricing inquiry or short question about cost
+    standalone_price_phrases = [
+        "narxi qancha",
+        "narxi qanfha",
+        "narxlar qanaqa",
+        "narxlar qanday",
+        "narxlari qanday",
+        "narxlar",
+        "narxlari",
+        "narxi",
+        "qancha turadi",
+        "qancha boladi",
+        "qancha bo'ladi",
+        "qancha ekan",
+        "necha pul",
+        "nechpul",
+        "preyskurant",
+        "prikurant",
+        "tariflar",
+        "tarifi",
+        "xizmat narxi",
+        "xizmat narxlari",
+        "xizmat qancha",
+        "xizmatingiz qancha",
+        "xizmatoz qancha",
+        "xizmatoz qanfha",
+        "xizmatiz qancha",
+        "xizmatlar qancha",
+        "xizmat haqi",
+        "сколько стоит",
+        "какая цена",
+        "цена",
+        "цены",
+        "стоимость",
+        "прайс",
+        "тарифы",
+        "почем",
+    ]
+    if any(p in q for p in standalone_price_phrases):
+        return True
+
+    # If the message is short (<= 4 words) and contains a price root (e.g. "qancha?", "qanfha?", "narxi?"):
+    if len(words) <= 4 and (has_price_word or has_price_phrase):
+        return True
+
+    # 3. Explicit service catalog / consultation requests
+    explicit_catalog_phrases = [
         "xizmatlar",
         "xizmatlaringiz",
+        "xizmatlariz",
+        "xizmatoz",
+        "xizmatiz",
         "qanday xizmat",
         "qanaqa xizmat",
         "nima xizmat",
@@ -63,13 +146,6 @@ def is_general_services_inquiry(text: str) -> bool:
         "barcha xizmatlar",
         "xizmatlar haqida",
         "xizmatlaringiz haqida",
-        "tariflar",
-        "narxlar",
-        "xizmatlar narxi",
-        "xizmatlar narxlari",
-        "xizmatlar qancha",
-        "narxi qancha",
-        "qancha turadi",
         "konsultatsiya olmoqchiman",
         "konsultatsiya olaman",
         "konsultatsiya olsak",
@@ -83,7 +159,6 @@ def is_general_services_inquiry(text: str) -> bool:
         "xizmat olmoq",
         "xizmat olaman",
         "xizmat olmoqchiman",
-        # Russian equivalents
         "какие услуги",
         "какие есть услуги",
         "список услуг",
@@ -93,16 +168,14 @@ def is_general_services_inquiry(text: str) -> bool:
         "хочу воспользоваться услугами",
         "хочу заказать услугу",
         "ваши услуги",
-        "тарифы",
-        "прайс",
         "хочу консультацию",
         "получить консультацию",
         "стоимость консультации",
     ]
-    if any(p in q for p in explicit_phrases):
+    if any(p in q for p in explicit_catalog_phrases):
         return True
 
-    # Short intent queries (e.g. "konsultatsiya", "maslahat kerak", "yurist kerak")
+    # 4. Short intent queries (e.g. "konsultatsiya", "maslahat kerak", "yurist kerak")
     if len(words) <= 5:
         short_intent_phrases = [
             "konsultatsiya",
@@ -124,6 +197,7 @@ def is_general_services_inquiry(text: str) -> bool:
             return True
 
     return False
+
 
 
 def format_services_catalog_text(services: Sequence[Service], lang: str = "uz") -> str:
@@ -627,7 +701,27 @@ async def handle_business_message(
             )
             return
 
-    # 3. Check if user selected a service (by number, ordinal, or keyword)
+    # 3. Check if user is inquiring generally about services catalog or pricing
+    if is_general_services_inquiry(question_text):
+        catalog_text = format_services_catalog_text(services, client_user.language)
+        if redis_client:
+            try:
+                await redis_client.set(f"biz_awaiting_service:{client_user.id}", "1", ex=3600)
+            except Exception as e:  # noqa: BLE001
+                logger.debug("Failed setting biz_awaiting_service: %s", e)
+
+        await message.answer(text=catalog_text)
+        await ChatService.log_message(
+            session=session,
+            user_id=client_user.id,
+            telegram_id=bot.id,
+            sender_type="bot",
+            text=catalog_text,
+            is_business=True,
+        )
+        return
+
+    # 4. Check if user selected a service (by number, ordinal, or keyword)
     chosen_service = detect_service_selection(question_text, services, is_awaiting=awaiting_choice)
     if chosen_service:
         if redis_client:
@@ -682,26 +776,6 @@ async def handle_business_message(
             telegram_id=bot.id,
             sender_type="bot",
             text=p2p_msg,
-            is_business=True,
-        )
-        return
-
-    # 4. Check if user is inquiring generally about services catalog
-    if is_general_services_inquiry(question_text):
-        catalog_text = format_services_catalog_text(services, client_user.language)
-        if redis_client:
-            try:
-                await redis_client.set(f"biz_awaiting_service:{client_user.id}", "1", ex=3600)
-            except Exception as e:  # noqa: BLE001
-                logger.debug("Failed setting biz_awaiting_service: %s", e)
-
-        await message.answer(text=catalog_text)
-        await ChatService.log_message(
-            session=session,
-            user_id=client_user.id,
-            telegram_id=bot.id,
-            sender_type="bot",
-            text=catalog_text,
             is_business=True,
         )
         return

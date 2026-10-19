@@ -506,6 +506,16 @@ def test_consultation_intent_triggers_catalog():
     assert is_general_services_inquiry("xizmatdan foydalanaman") is True
     assert is_general_services_inquiry("xizmatlardan foydalanmoqchiman") is True
     assert is_general_services_inquiry("konsultatsiya") is True
+    assert is_general_services_inquiry("Xizmatoz qancha") is True
+    assert is_general_services_inquiry("Xizmatoz qanfha") is True
+    assert is_general_services_inquiry("xizmat narxi") is True
+    assert is_general_services_inquiry("xizmatlar narxi") is True
+    assert is_general_services_inquiry("xizmatlar qancha") is True
+    assert is_general_services_inquiry("qancha turadi") is True
+    assert is_general_services_inquiry("narxi qancha") is True
+    assert is_general_services_inquiry("necha pul") is True
+    assert is_general_services_inquiry("сколько стоит") is True
+    assert is_general_services_inquiry("какие услуги") is True
 
 
 def test_office_service_address_privacy_and_confirmation():
