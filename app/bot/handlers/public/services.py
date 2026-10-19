@@ -267,7 +267,7 @@ async def handle_p2p_payment(
         f"💳 Karta raqami: <code>{card_number}</code>\n"
         f"👤 Qabul qiluvchi: <b>{card_holder}</b>\n\n"
         "<i>To'lovni amalga oshirgach, to'lov cheki (skrinshot yoki PDF)ni ushbu bot chatiga yuboring. "
-        "Huquqshunos to'lovni tasdiqlashi bilan xizmat ijrosi boshlanadi.</i>"
+        "Huquqshunos to'lovni tasdiqlashi bilan xizmat ko’rsatish darhol boshlanadi.</i>"
         if lang == "uz"
         else f"💳 <b>Оплата по карте (Транзакция #{tx.id})</b>\n\n"
         f"💼 Услуга: <b>{service.title_ru}</b>\n"

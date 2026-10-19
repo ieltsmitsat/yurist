@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import re
-
 from collections.abc import Sequence
 
 from aiogram import Bot, Router
@@ -487,7 +486,7 @@ async def handle_business_message(
                     logger.debug("Failed deleting biz_awaiting_service: %s", e)
 
             org_settings = await OrgSettingsService.get_settings(session)
-            tx = await PaymentService.create_transaction(
+            _ = await PaymentService.create_transaction(
                 session=session,
                 user=client_user,
                 amount=target_service.price,
@@ -496,13 +495,13 @@ async def handle_business_message(
             )
             price_fmt = f"{target_service.price:,.0f} so'm".replace(",", " ")
             p2p_msg = (
-                f"💳 <b>To'lov ma'lumotlari (Tranzaksiya #{tx.id})</b>\n\n"
-                f"💼 Tanlangan xizmat: <b>{target_service.title_uz}</b>\n"
+                "💳 <b>To'lov ma'lumotlari</b>\n\n"
+                f"💼 Xizmat: <b>{target_service.title_uz}</b>\n"
                 f"💵 To'lov summasi: <b>{price_fmt}</b>\n\n"
                 f"💳 Karta raqami: <code>{org_settings.card_number}</code>\n"
                 f"👤 Qabul qiluvchi: <b>{org_settings.card_holder}</b>\n\n"
                 "<i>To'lovni amalga oshirgach, to'lov cheki (skrinshot)ni ushbu chatga yuboring. "
-                "Huquqshunos to'lovni tasdiqlashi bilan xizmat ijrosi darhol boshlanadi.</i>"
+                "Huquqshunos to'lovni tasdiqlashi bilan xizmat ko’rsatish darhol boshlanadi.</i>"
             )
             await message.answer(text=p2p_msg)
             await ChatService.log_message(
@@ -548,7 +547,7 @@ async def handle_business_message(
 
         # User already has phone number: issue payment details immediately
         org_settings = await OrgSettingsService.get_settings(session)
-        tx = await PaymentService.create_transaction(
+        _ = await PaymentService.create_transaction(
             session=session,
             user=client_user,
             amount=chosen_service.price,
@@ -556,13 +555,13 @@ async def handle_business_message(
             transaction_ref=chosen_service.title_uz,
         )
         p2p_msg = (
-            f"💳 <b>To'lov ma'lumotlari (Tranzaksiya #{tx.id})</b>\n\n"
-            f"💼 Tanlangan xizmat: <b>{chosen_service.title_uz}</b>\n"
+            "💳 <b>To'lov ma'lumotlari</b>\n\n"
+            f"💼 Xizmat: <b>{chosen_service.title_uz}</b>\n"
             f"💵 To'lov summasi: <b>{price_fmt}</b>\n\n"
             f"💳 Karta raqami: <code>{org_settings.card_number}</code>\n"
             f"👤 Qabul qiluvchi: <b>{org_settings.card_holder}</b>\n\n"
             "<i>To'lovni amalga oshirgach, to'lov cheki (skrinshot)ni ushbu chatga yuboring. "
-            "Huquqshunos to'lovni tasdiqlashi bilan xizmat ijrosi darhol boshlanadi.</i>"
+            "Huquqshunos to'lovni tasdiqlashi bilan xizmat ko’rsatish darhol boshlanadi.</i>"
         )
         await message.answer(text=p2p_msg)
         await ChatService.log_message(
@@ -624,7 +623,7 @@ async def handle_business_message(
                 return
 
             org_settings = await OrgSettingsService.get_settings(session)
-            tx = await PaymentService.create_transaction(
+            _ = await PaymentService.create_transaction(
                 session=session,
                 user=client_user,
                 amount=target_service.price,
@@ -632,13 +631,13 @@ async def handle_business_message(
                 transaction_ref=target_service.title_uz,
             )
             p2p_msg = (
-                f"💳 <b>To'lov ma'lumotlari (Tranzaksiya #{tx.id})</b>\n\n"
+                "💳 <b>To'lov ma'lumotlari</b>\n\n"
                 f"💼 Xizmat: <b>{target_service.title_uz}</b>\n"
                 f"💵 To'lov summasi: <b>{price_fmt}</b>\n\n"
                 f"💳 Karta raqami: <code>{org_settings.card_number}</code>\n"
                 f"👤 Qabul qiluvchi: <b>{org_settings.card_holder}</b>\n\n"
                 "<i>To'lovni amalga oshirgach, to'lov cheki (skrinshot)ni ushbu chatga yuboring. "
-                "Huquqshunos to'lovni tasdiqlashi bilan xizmat ijrosi darhol boshlanadi.</i>"
+                "Huquqshunos to'lovni tasdiqlashi bilan xizmat ko’rsatish darhol boshlanadi.</i>"
             )
             await message.answer(text=p2p_msg)
             await ChatService.log_message(
