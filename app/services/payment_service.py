@@ -1,6 +1,7 @@
 """Payment and legal services ledger service (Safe abstraction adhering to Off-limits rule)."""
 
 import logging
+import re
 from collections.abc import Sequence
 from decimal import Decimal
 from typing import Any
@@ -30,7 +31,7 @@ DEFAULT_LEGAL_SERVICES: list[dict[str, Any]] = [
             "• Оценка юридических и финансовых рисков;\n"
             "• Пошаговый алгоритм защиты ваших интересов."
         ),
-        "price": Decimal("150000.00"),
+        "price": "150 000 so'm",
         "service_type": "consultation",
     },
     {
@@ -48,7 +49,7 @@ DEFAULT_LEGAL_SERVICES: list[dict[str, Any]] = [
             "• Проверка на соответствие законодательству Республики Узбекистан;\n"
             "• Внесение правок в ваших интересах и заключение адвоката."
         ),
-        "price": Decimal("300000.00"),
+        "price": "300 000 so'm",
         "service_type": "audit",
     },
     {
@@ -66,7 +67,7 @@ DEFAULT_LEGAL_SERVICES: list[dict[str, Any]] = [
             "• Нормативное обоснование статьями кодексов и практикой ВС РУз;\n"
             "• Расчет госпошлины и инструкция по подаче в суд."
         ),
-        "price": Decimal("500000.00"),
+        "price": "500 000 so'm",
         "service_type": "claim",
     },
     {
@@ -84,7 +85,7 @@ DEFAULT_LEGAL_SERVICES: list[dict[str, Any]] = [
             "• Личное участие адвоката во всех судебных заседаниях;\n"
             "• Сбор доказательств, ходатайства, апелляция и кассация."
         ),
-        "price": Decimal("2500000.00"),
+        "price": "2 500 000 so'm",
         "service_type": "court",
     },
     {
@@ -102,7 +103,7 @@ DEFAULT_LEGAL_SERVICES: list[dict[str, Any]] = [
             "• Аудит трудовых отношений и кадровой документации;\n"
             "• Защита при проверках госорганов и приоритетные консультации."
         ),
-        "price": Decimal("4000000.00"),
+        "price": "4 000 000 so'm",
         "service_type": "retainer",
     },
 ]
@@ -112,9 +113,41 @@ class PaymentService:
     """Manages service catalog, transaction creation, and payment statuses safely."""
 
     @classmethod
+    def extract_numeric_amount(cls, val: Decimal | str | float | Any) -> Decimal:
+        """Safely convert string or numeric price to Decimal for transaction ledger."""
+        if isinstance(val, Decimal):
+            return val
+        if isinstance(val, (int, float)):
+            return Decimal(str(val))
+        if not val:
+            return Decimal("0.00")
+        digits = re.findall(r"\d+", str(val))
+        if digits:
+            try:
+                return Decimal("".join(digits))
+            except Exception as e:  # noqa: BLE001
+                logger.debug("Failed parsing numeric amount: %s", e)
+        return Decimal("0.00")
+
+    @classmethod
+    def format_service_price(cls, price: str | Decimal | float | Any) -> str:
+        """Format service price cleanly whether text or numeric."""
+        if not price:
+            return "Kelishuv asosida"
+        if isinstance(price, (int, float, Decimal)):
+            return f"{price:,.0f} so'm".replace(",", " ")
+        price_str = str(price).strip()
+        clean_num = price_str.replace(" ", "").replace(",", "")
+        try:
+            val = float(clean_num)
+            return f"{val:,.0f} so'm".replace(",", " ")
+        except ValueError:
+            return price_str
+
+    @classmethod
     async def get_active_services(cls, session: AsyncSession) -> Sequence[Service]:
         """Fetch all currently active legal services."""
-        stmt = select(Service).where(Service.is_active.is_(True)).order_by(Service.price.asc())
+        stmt = select(Service).where(Service.is_active.is_(True)).order_by(Service.id.asc())
         res = await session.execute(stmt)
         return res.scalars().all()
 
@@ -130,18 +163,19 @@ class PaymentService:
         cls,
         session: AsyncSession,
         user: User,
-        amount: Decimal,
+        amount: Decimal | str | float,
         payment_method: str,
         inquiry_id: int | None = None,
         appointment_id: int | None = None,
         transaction_ref: str | None = None,
     ) -> Transaction:
         """Record a new payment transaction in pending state."""
+        num_amount = cls.extract_numeric_amount(amount)
         tx = Transaction(
             user_id=user.id,
             inquiry_id=inquiry_id,
             appointment_id=appointment_id,
-            amount=amount,
+            amount=num_amount,
             payment_method=payment_method,
             payment_status="pending",
             transaction_ref=transaction_ref,
@@ -150,7 +184,7 @@ class PaymentService:
         await session.commit()
         await session.refresh(tx)
         logger.info(
-            "Created pending transaction #%d for user #%d: amount=%s", tx.id, user.id, str(amount)
+            "Created pending transaction #%d for user #%d: amount=%s", tx.id, user.id, str(num_amount)
         )
         return tx
 

@@ -1,9 +1,8 @@
 """Service catalog model."""
 
-from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Boolean, Integer, Numeric, String, Text
+from sqlalchemy import Boolean, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -24,7 +23,7 @@ class Service(Base):
     title_ru: Mapped[str] = mapped_column(String(255), nullable=False)
     description_uz: Mapped[str | None] = mapped_column(Text, nullable=True)
     description_ru: Mapped[str | None] = mapped_column(Text, nullable=True)
-    price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    price: Mapped[str] = mapped_column(String(100), nullable=False)
     service_type: Mapped[str] = mapped_column(
         String(50), nullable=False
     )  # consultation, audit, court, contract

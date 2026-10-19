@@ -155,7 +155,7 @@ export interface Service {
   title_ru: string;
   description_uz: string | null;
   description_ru: string | null;
-  price: number;
+  price: string;
   service_type: string;
   is_active: boolean;
 }

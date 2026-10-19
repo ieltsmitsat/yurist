@@ -1,6 +1,5 @@
 """Services catalog CRUD API for admin panel."""
 
-from decimal import Decimal
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -19,7 +18,7 @@ class ServiceCreateRequest(BaseModel):
     title_ru: str
     description_uz: str | None = None
     description_ru: str | None = None
-    price: Decimal
+    price: str | float
     service_type: str
     is_active: bool = True
 
@@ -29,7 +28,7 @@ class ServiceUpdateRequest(BaseModel):
     title_ru: str | None = None
     description_uz: str | None = None
     description_ru: str | None = None
-    price: Decimal | None = None
+    price: str | float | None = None
     service_type: str | None = None
     is_active: bool | None = None
 
@@ -39,7 +38,7 @@ async def list_services(
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> list[dict[str, Any]]:
     """List all services in the catalog."""
-    stmt = select(Service).order_by(Service.price.asc())
+    stmt = select(Service).order_by(Service.id.asc())
     res = await session.execute(stmt)
     services = res.scalars().all()
     return [
@@ -49,7 +48,7 @@ async def list_services(
             "title_ru": s.title_ru,
             "description_uz": s.description_uz,
             "description_ru": s.description_ru,
-            "price": float(s.price),
+            "price": str(s.price),
             "service_type": s.service_type,
             "is_active": s.is_active,
         }
@@ -68,7 +67,7 @@ async def create_service(
         title_ru=payload.title_ru,
         description_uz=payload.description_uz,
         description_ru=payload.description_ru,
-        price=payload.price,
+        price=str(payload.price),
         service_type=payload.service_type,
         is_active=payload.is_active,
     )
@@ -92,6 +91,9 @@ async def update_service(
         raise HTTPException(status_code=404, detail="Service not found")
 
     update_data = payload.model_dump(exclude_unset=True)
+    if "price" in update_data and update_data["price"] is not None:
+        update_data["price"] = str(update_data["price"])
+
     for field, value in update_data.items():
         setattr(srv, field, value)
 

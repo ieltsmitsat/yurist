@@ -94,7 +94,7 @@ def format_services_catalog_text(services: Sequence[Service], lang: str = "uz") 
             "💼 <b>Наши квалифицированные юридические услуги:</b>\n"
         ]
         for idx, s in enumerate(services, start=1):
-            price_fmt = f"{s.price:,.0f} сум".replace(",", " ")
+            price_fmt = PaymentService.format_service_price(s.price)
             title = s.title_ru or s.title_uz
             desc = s.description_ru or s.description_uz or ""
             short_desc = desc.split("\n")[0].strip() if desc else ""
@@ -111,7 +111,7 @@ def format_services_catalog_text(services: Sequence[Service], lang: str = "uz") 
         "💼 <b>Bizning professional yuridik xizmatlarimiz va narxlar:</b>\n"
     ]
     for idx, s in enumerate(services, start=1):
-        price_fmt = f"{s.price:,.0f} so'm".replace(",", " ")
+        price_fmt = PaymentService.format_service_price(s.price)
         title = s.title_uz
         desc = s.description_uz or ""
         short_desc = desc.split("\n")[0].strip() if desc else ""
@@ -493,7 +493,7 @@ async def handle_business_message(
                 payment_method="p2p_card",
                 transaction_ref=target_service.title_uz,
             )
-            price_fmt = f"{target_service.price:,.0f} so'm".replace(",", " ")
+            price_fmt = PaymentService.format_service_price(target_service.price)
             p2p_msg = (
                 "💳 <b>To'lov ma'lumotlari</b>\n\n"
                 f"💼 Xizmat: <b>{target_service.title_uz}</b>\n"
@@ -523,8 +523,7 @@ async def handle_business_message(
                 await redis_client.delete(f"biz_awaiting_service:{client_user.id}")
             except Exception as e:  # noqa: BLE001
                 logger.debug("Failed setting biz_selected_service: %s", e)
-
-        price_fmt = f"{chosen_service.price:,.0f} so'm".replace(",", " ")
+        price_fmt = PaymentService.format_service_price(chosen_service.price)
 
         # If user has no phone number, ask for phone first
         if not client_user.phone_number:
@@ -603,7 +602,7 @@ async def handle_business_message(
             target_service = await find_relevant_service(session, question_text)
 
         if target_service:
-            price_fmt = f"{target_service.price:,.0f} so'm".replace(",", " ")
+            price_fmt = PaymentService.format_service_price(target_service.price)
             if not client_user.phone_number:
                 prompt_phone_text = (
                     f"💼 <b>{target_service.title_uz}</b>\n"

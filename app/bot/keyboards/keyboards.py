@@ -236,10 +236,12 @@ def sos_options_kb(lang: str = "uz") -> InlineKeyboardMarkup:
 
 def services_catalog_kb(services: Sequence[Service], lang: str = "uz") -> InlineKeyboardMarkup:
     """Inline catalog of active legal services."""
+    from app.services.payment_service import PaymentService
+
     buttons = []
     for s in services:
         title = s.title_uz if lang == "uz" else s.title_ru
-        price_fmt = f"{s.price:,.0f} so'm".replace(",", " ")
+        price_fmt = PaymentService.format_service_price(s.price)
         buttons.append(
             [
                 InlineKeyboardButton(

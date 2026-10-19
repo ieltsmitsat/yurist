@@ -146,7 +146,7 @@ async def handle_buy_service(
     lang = user.language if user else "uz"
     title = service.title_uz if lang == "uz" else service.title_ru
     desc = service.description_uz if lang == "uz" else service.description_ru
-    price_fmt = f"{service.price:,.0f} so'm".replace(",", " ")
+    price_fmt = PaymentService.format_service_price(service.price)
 
     text = format_service_details_text(title, desc, price_fmt, lang)
     await callback.answer()
@@ -176,7 +176,7 @@ async def handle_order_service_cta(
     if service:
         title = service.title_uz if lang == "uz" else service.title_ru
         desc = service.description_uz if lang == "uz" else service.description_ru
-        price_fmt = f"{service.price:,.0f} so'm".replace(",", " ")
+        price_fmt = PaymentService.format_service_price(service.price)
         text = format_service_details_text(title, desc, price_fmt, lang)
         await callback.answer()
 
@@ -236,7 +236,7 @@ async def handle_p2p_payment(
     )
 
     lang = user.language
-    price_fmt = f"{service.price:,.0f} so'm".replace(",", " ")
+    price_fmt = PaymentService.format_service_price(service.price)
 
     # Notify admin / lawyer about new pending transaction
     notify_chat = settings.ADMIN_GROUP_ID or settings.LAWYER_TELEGRAM_ID
@@ -307,7 +307,7 @@ async def handle_stars_payment(
     )
 
     lang = user.language
-    price_fmt = f"{service.price:,.0f} so'm".replace(",", " ")
+    price_fmt = PaymentService.format_service_price(service.price)
 
     # Notify admin / lawyer about Stars invoice request
     notify_chat = settings.ADMIN_GROUP_ID or settings.LAWYER_TELEGRAM_ID

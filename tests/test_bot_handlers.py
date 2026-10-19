@@ -1,6 +1,5 @@
 """Tests for Telegram Bot handlers, keyboards, and dispatcher configuration."""
 
-from decimal import Decimal
 
 import pytest
 from aiogram import Dispatcher
@@ -71,14 +70,14 @@ def test_keyboards_structure():
             id=1,
             title_uz="Konsultatsiya",
             title_ru="Консультация",
-            price=Decimal(100000),
+            price="100 000 so'm",
             service_type="consultation",
         ),
         Service(
             id=2,
             title_uz="Sudda vakillik",
             title_ru="Суд",
-            price=Decimal(2000000),
+            price="2 000 000 so'm",
             service_type="court",
         ),
     ]
@@ -356,7 +355,6 @@ async def test_handle_referral_menu_and_callback():
 
 @pytest.mark.asyncio
 async def test_services_and_pricing_handlers():
-    from decimal import Decimal
     from unittest.mock import AsyncMock, MagicMock
 
     from aiogram.types import Message
@@ -379,7 +377,7 @@ async def test_services_and_pricing_handlers():
         title_ru="Тест Консультация",
         description_uz="Batafsil tahlil va maslahat",
         description_ru="Подробный анализ",
-        price=Decimal("150000.00"),
+        price="150 000 so'm",
         service_type="consultation",
         is_active=True,
     )

@@ -54,7 +54,7 @@ export default function ServicesPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const data = { ...form, price: parseFloat(form.price) };
+    const data = { ...form, price: form.price.trim() };
     try {
       if (editId) {
         await updateService(editId, data);
@@ -145,13 +145,13 @@ export default function ServicesPage() {
               />
             </div>
             <div>
-              <label className="block text-[13px] font-semibold text-slate-700 mb-1.5 uppercase tracking-wide">Narxi (so'm)</label>
+              <label className="block text-[13px] font-semibold text-slate-700 mb-1.5 uppercase tracking-wide">Narxi (so'm yoki matn)</label>
               <input
-                type="number"
+                type="text"
                 value={form.price}
                 onChange={(e) => setForm({ ...form, price: e.target.value })}
                 className="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder:text-slate-400"
-                placeholder="0"
+                placeholder="Masalan: 40 000 dan boshlanadi yoki 150 000"
                 required
               />
             </div>

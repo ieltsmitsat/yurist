@@ -1,6 +1,5 @@
 """Tests for database models and configuration."""
 
-from decimal import Decimal
 
 from app.core.config import settings
 from app.core.redis import BusinessPauseManager
@@ -37,11 +36,11 @@ def test_service_model_instantiation():
     service = Service(
         title_uz="Sudda vakillik",
         title_ru="Представительство в суде",
-        price=Decimal("1500000.00"),
+        price="1 500 000 so'm",
         service_type="court",
     )
     assert service.title_uz == "Sudda vakillik"
-    assert service.price == Decimal("1500000.00")
+    assert service.price == "1 500 000 so'm"
     assert service.is_active is True
 
 

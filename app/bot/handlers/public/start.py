@@ -126,7 +126,7 @@ async def handle_start(message: Message, session: AsyncSession, user: User | Non
             if service:
                 title = service.title_uz if lang == "uz" else service.title_ru
                 desc = service.description_uz if lang == "uz" else service.description_ru
-                price_fmt = f"{service.price:,.0f} so'm".replace(",", " ")
+                price_fmt = PaymentService.format_service_price(service.price)
                 card_text = format_service_details_text(title, desc, price_fmt, lang)
                 await message.answer(card_text, reply_markup=payment_methods_kb(service.id, lang))
 

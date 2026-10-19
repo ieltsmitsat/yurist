@@ -54,6 +54,12 @@ async def init_database() -> None:
         except Exception as exc:  # noqa: BLE001
             logger.debug("Column business_connection_id check note: %s", exc)
 
+        try:
+            if "postgres" in settings.DATABASE_URL:
+                await conn.execute(text("ALTER TABLE services ALTER COLUMN price TYPE VARCHAR(100) USING price::text"))
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("Services price column conversion note: %s", exc)
+
     # Seed if legal chunks empty
     async with AsyncSessionLocal() as session:
         result = await session.execute(select(func.count(LegalChunk.id)))

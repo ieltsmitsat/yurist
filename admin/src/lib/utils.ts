@@ -5,7 +5,19 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatCurrency(amount: number): string {
+export function formatCurrency(amount: number | string): string {
+  if (typeof amount === "string") {
+    const trimmed = amount.trim();
+    if (!trimmed) return "—";
+    const num = Number(trimmed.replace(/\s+/g, "").replace(",", "."));
+    if (isNaN(num)) {
+      return trimmed;
+    }
+    return new Intl.NumberFormat("uz-UZ", {
+      style: "decimal",
+      maximumFractionDigits: 0,
+    }).format(num) + " so'm";
+  }
   return new Intl.NumberFormat("uz-UZ", {
     style: "decimal",
     maximumFractionDigits: 0,

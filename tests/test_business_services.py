@@ -198,7 +198,7 @@ async def test_payment_service():
         service = Service(
             title_uz="Ekspress Shartnoma Auditi",
             title_ru="Экспресс аудит договора",
-            price=Decimal("150000.00"),
+            price="150 000 so'm",
             service_type="audit",
         )
         session.add(service)
@@ -411,7 +411,7 @@ async def test_business_chat_services_catalog_and_selection():
         title_uz="Shaxsiy konsultatsiya",
         title_ru="Консультация",
         description_uz="24 soat ichida to'liq tahlil",
-        price=Decimal("150000.00"),
+        price="150 000 so'm",
         service_type="consultation",
         is_active=True,
     )
@@ -420,7 +420,7 @@ async def test_business_chat_services_catalog_and_selection():
         title_uz="Shartnoma auditi",
         title_ru="Аудит договора",
         description_uz="Xatarlarni tekshirish",
-        price=Decimal("300000.00"),
+        price="300 000 so'm",
         service_type="audit",
         is_active=True,
     )
@@ -429,7 +429,7 @@ async def test_business_chat_services_catalog_and_selection():
         title_uz="Da'vo arizasi tuzish",
         title_ru="Исковое заявление",
         description_uz="Sud arizasi",
-        price=Decimal("500000.00"),
+        price="500 000 so'm",
         service_type="claim",
         is_active=True,
     )
@@ -455,6 +455,18 @@ async def test_business_chat_services_catalog_and_selection():
     assert detect_service_selection("Menga shartnoma tekshirish kerak", services) == s2
     assert detect_service_selection("Sudga da'vo arizasi bermoqchiman", services) == s3
     assert detect_service_selection("Oddiy salom", services) is None
+
+
+def test_string_price_formatting_and_extraction():
+    assert PaymentService.extract_numeric_amount("40 000 dan boshlanadi") == Decimal("40000.00")
+    assert PaymentService.extract_numeric_amount("150000") == Decimal("150000.00")
+    assert PaymentService.extract_numeric_amount("Kelishuv asosida") == Decimal("0.00")
+    assert PaymentService.extract_numeric_amount(Decimal("250000.50")) == Decimal("250000.50")
+
+    assert PaymentService.format_service_price("40 000 dan boshlanadi") == "40 000 dan boshlanadi"
+    assert PaymentService.format_service_price("150000") == "150 000 so'm"
+    assert PaymentService.format_service_price("150 000 so'm") == "150 000 so'm"
+    assert PaymentService.format_service_price(Decimal(50000)) == "50 000 so'm"
 
 
 
