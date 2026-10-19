@@ -13,6 +13,7 @@ from app.db.models.appointment import Appointment
 from app.db.models.attachment import Attachment
 from app.db.models.chat_message import ChatMessage
 from app.db.models.inquiry import Inquiry
+from app.db.models.org_settings import OrgSettings
 from app.db.models.service import Service
 from app.db.models.sos import SOSRequest
 from app.db.models.system_access import SystemAccess
@@ -54,6 +55,7 @@ async def setup_test_db():
             SOSRequest.__table__,
             ChatMessage.__table__,
             SystemAccess.__table__,
+            OrgSettings.__table__,
         ]
         await conn.run_sync(Base.metadata.create_all, tables=tables)
     yield
@@ -456,3 +458,36 @@ async def test_system_access_crud_api():
         # Verify deleted
         res_get_del = await client.get("/api/v1/settings/access?role=lawyer")
         assert not any(i["id"] == lawyer_id for i in res_get_del.json())
+
+
+@pytest.mark.asyncio
+async def test_org_settings_endpoints():
+    """Test GET and PUT endpoints for Organization profile and payment card settings."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # 1. Fetch defaults
+        res_get = await client.get("/api/v1/settings/organization")
+        assert res_get.status_code == 200
+        data = res_get.json()
+        assert data["card_number"] == "9860 0001 2345 6789"
+        assert data["card_holder"] == "Yuridik Xizmatlar"
+
+        # 2. Update settings
+        payload = {
+            "card_number": "8600 5555 4444 3333",
+            "card_holder": "Advokat Iqboljon",
+            "contact_phone": "+998 (90) 123-45-67",
+            "office_address": "Toshkent sh., Chilonzor 9",
+            "working_hours": "09:00 - 18:00",
+        }
+        res_put = await client.put("/api/v1/settings/organization", json=payload)
+        assert res_put.status_code == 200
+        put_data = res_put.json()
+        assert put_data["card_number"] == "8600 5555 4444 3333"
+        assert put_data["card_holder"] == "Advokat Iqboljon"
+
+        # 3. Verify updated
+        res_recheck = await client.get("/api/v1/settings/organization")
+        assert res_recheck.status_code == 200
+        assert res_recheck.json()["card_number"] == "8600 5555 4444 3333"
+

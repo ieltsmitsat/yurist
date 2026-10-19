@@ -1,21 +1,112 @@
 import asyncio
 import logging
+import re
 
 from aiogram import Bot, Router
 from aiogram.types import BusinessConnection, Message
 from redis.asyncio import Redis
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.redis import BusinessPauseManager
+from app.db.models.inquiry import Inquiry
+from app.db.models.service import Service
+from app.db.models.transaction import Transaction
 from app.services.ai.llm_client import LLMService
 from app.services.chat_service import ChatService
+from app.services.group_notification_service import GroupNotificationService
+from app.services.org_settings_service import OrgSettingsService
+from app.services.payment_service import PaymentService
 from app.services.user_service import UserService
 
 logger = logging.getLogger(__name__)
 
 router = Router(name="business_router")
 llm_service = LLMService()
+
+PHONE_REGEX = re.compile(
+    r"(?:\+?998[\s-]?)?(?:9[01345789]|33|77|88|50|95)[\s-]?\d{3}[\s-]?\d{2}[\s-]?\d{2}\b"
+)
+
+
+def extract_phone(text: str) -> str | None:
+    """Extract and normalize Uzbekistan phone number from text."""
+    match = PHONE_REGEX.search(text)
+    if not match:
+        return None
+    raw = re.sub(r"[^\d+]", "", match.group(0))
+    if not raw.startswith("+"):
+        if raw.startswith("998"):
+            raw = "+" + raw
+        elif len(raw) == 9:
+            raw = "+998" + raw
+    return raw
+
+
+def is_service_payment_intent(text: str) -> bool:
+    """Detect if client is asking about service price, buying, or paying."""
+    q = text.lower()
+    keywords = [
+        "narxi qancha",
+        "narxi nechi",
+        "qancha turadi",
+        "narxlari",
+        "sotib olmoq",
+        "xizmatidan foydalan",
+        "tolov qilmoq",
+        "to'lov qilmoq",
+        "to'lamoqchiman",
+        "tolamoqchiman",
+        "karta raqam",
+        "kartangiz",
+        "kartani yubor",
+        "qayerga to'la",
+        "qayerga tola",
+        "qayerga to'lov",
+        "buyurtma qilmoq",
+        "hisob raqam",
+        "chekni qayerga",
+        "rekwizit",
+        "rekvizit",
+        "chek",
+        "to'lov qildim",
+        "tolov qildim",
+        "to'ladim",
+        "toladim",
+    ]
+    return any(k in q for k in keywords)
+
+
+async def find_relevant_service(session: AsyncSession, text: str) -> Service | None:
+    """Find the most relevant legal service based on client text keywords."""
+    services = await PaymentService.get_active_services(session)
+    if not services:
+        await PaymentService.seed_default_services(session)
+        services = await PaymentService.get_active_services(session)
+
+    q = text.lower()
+    if any(k in q for k in ["da'vo", "davo", "ariza", "talabnoma", "pretenziya"]):
+        for s in services:
+            if "da'vo" in s.title_uz.lower() or s.service_type == "claim":
+                return s
+    if any(k in q for k in ["shartnoma", "audit", "tekshir", "shartnomani"]):
+        for s in services:
+            if "shartnoma" in s.title_uz.lower() or s.service_type == "audit":
+                return s
+    if any(k in q for k in ["sud", "sudda", "sudya", "himoya"]):
+        for s in services:
+            if "sud" in s.title_uz.lower() or s.service_type == "court":
+                return s
+    if any(k in q for k in ["biznes", "mchj", "kompaniya"]):
+        for s in services:
+            if "biznes" in s.title_uz.lower() or s.service_type == "business":
+                return s
+
+    for s in services:
+        if s.service_type == "consultation" or "konsultatsiya" in s.title_uz.lower():
+            return s
+    return services[0] if services else None
 
 
 @router.business_connection()
@@ -37,7 +128,7 @@ async def handle_business_message(
     bot: Bot,
     redis_client: Redis | None = None,
 ) -> None:
-    """Handle messages in Telegram Business chats with automatic 30-min pause."""
+    """Handle messages in Telegram Business chats with payment, cheque, and manual takeover support."""
     if not message.from_user or not message.business_connection_id:
         return
 
@@ -49,10 +140,99 @@ async def handle_business_message(
     client_name = message.chat.full_name or "Mijoz"
     client_user, _ = await UserService.get_or_create_user(session, client_tg_id, full_name=client_name)
 
+    # Store latest active business_connection_id for return notifications
+    client_user.business_connection_id = message.business_connection_id
+    await session.commit()
+
     # In Telegram Business (1-on-1 private chat):
     # - If sender_id == chat_id: incoming message from the client to the business account
     # - If sender_id != chat_id: outgoing manual message from the business account owner (lawyer)
     is_lawyer = (sender_id != chat_id)
+
+    # =========================================================================
+    # A. HANDLE CLIENT PHOTO (PAYMENT CHEQUE / RECEIPT)
+    # =========================================================================
+    if not is_lawyer and message.photo:
+        photo_file_id = message.photo[-1].file_id
+
+        # 1. Fetch latest pending or recent transaction
+        stmt_tx = (
+            select(Transaction)
+            .where(Transaction.user_id == client_user.id)
+            .order_by(Transaction.id.desc())
+            .limit(1)
+        )
+        res_tx = await session.execute(stmt_tx)
+        latest_tx = res_tx.scalar_one_or_none()
+
+        # 2. Fetch latest user inquiry / chat context for problem snippet
+        stmt_inq = (
+            select(Inquiry)
+            .where(Inquiry.user_id == client_user.id)
+            .order_by(Inquiry.id.desc())
+            .limit(1)
+        )
+        res_inq = await session.execute(stmt_inq)
+        latest_inq = res_inq.scalar_one_or_none()
+
+        problem_snippet = ""
+        if latest_inq and latest_inq.question_text:
+            problem_snippet = latest_inq.question_text
+        elif latest_tx and latest_tx.transaction_ref:
+            problem_snippet = f"Xizmat buyurtmasi: {latest_tx.transaction_ref}"
+        else:
+            recent_msgs = await ChatService.get_conversation(session, client_user.id, limit=5)
+            user_texts = [m.text for m in recent_msgs if m.sender_type == "user" and m.text]
+            if user_texts:
+                problem_snippet = " | ".join(user_texts[-3:])
+
+        service_title = "Yuridik xizmat / Konsultatsiya"
+        if latest_tx and latest_tx.transaction_ref:
+            service_title = latest_tx.transaction_ref
+        elif latest_tx:
+            service_title = f"Xizmat to'lovi (#{latest_tx.id})"
+
+        # 3. Dispatch to group forum topics (Payment & Contact topics)
+        await GroupNotificationService.notify_payment_receipt(
+            bot=bot,
+            session=session,
+            user=client_user,
+            photo_file_id=photo_file_id,
+            service_title=service_title,
+            problem_summary=problem_snippet,
+            tx_id=latest_tx.id if latest_tx else None,
+        )
+
+        await GroupNotificationService.notify_contact_request(
+            bot=bot,
+            session=session,
+            user=client_user,
+            service_title=service_title,
+            problem_summary=problem_snippet,
+        )
+
+        # 4. Reply to client in business chat
+        ack_text = (
+            "✅ <b>To'lov chekingiz qabul qilindi!</b>\n\n"
+            "Tez orada mas'ul huquqshunosimiz uni tekshirib, siz bilan bog'lanadi va ishingizni ko'rib chiqishni boshlaydi."
+        )
+        await message.answer(text=ack_text)
+
+        await ChatService.log_message(
+            session=session,
+            user_id=client_user.id,
+            telegram_id=sender_id,
+            sender_type="user",
+            text="[To'lov cheki skrinshoti yuklandi]",
+            is_business=True,
+            message_type="photo",
+            telegram_message_id=message.message_id,
+        )
+        return
+
+    # =========================================================================
+    # B. EXTRACT TEXT / VOICE
+    # =========================================================================
     question_text = ""
     is_voice = False
 
@@ -60,7 +240,7 @@ async def handle_business_message(
         question_text = message.text
     elif message.voice:
         is_voice = True
-        if not is_lawyer:  # We don't need to transcribe lawyer's voice notes sent manually
+        if not is_lawyer:
             from pathlib import Path
             from tempfile import NamedTemporaryFile
 
@@ -118,7 +298,11 @@ async def handle_business_message(
                 redis_client=redis_client,
                 duration_seconds=settings.BUSINESS_TAKEOVER_PAUSE_SECONDS,
             )
-            logger.info("Lawyer manually replied in chat %d; paused AI for %d seconds", chat_id, settings.BUSINESS_TAKEOVER_PAUSE_SECONDS)
+            logger.info(
+                "Lawyer manually replied in chat %d; paused AI for %d seconds",
+                chat_id,
+                settings.BUSINESS_TAKEOVER_PAUSE_SECONDS,
+            )
         return
 
     # 5. Client message: Check if chat is currently paused by lawyer takeover
@@ -126,7 +310,81 @@ async def handle_business_message(
         logger.info("AI response skipped for chat %d (Lawyer takeover active)", chat_id)
         return
 
-    # 6. Generate Undetectable human attorney reply
+    # =========================================================================
+    # C. PHONE NUMBER DETECTION & SERVICE PAYMENT ROUTING IN BUSINESS CHAT
+    # =========================================================================
+    found_phone = extract_phone(question_text)
+    if found_phone and found_phone != client_user.phone_number:
+        client_user.phone_number = found_phone
+        await session.commit()
+        await GroupNotificationService.notify_new_lead(
+            bot=bot,
+            session=session,
+            user=client_user,
+            purpose=question_text,
+        )
+        logger.info("Captured phone %s for user %d in business chat", found_phone, client_user.id)
+
+    wants_payment = is_service_payment_intent(question_text)
+    is_phone_only = (found_phone is not None and len(question_text.strip()) <= 20)
+
+    if wants_payment or is_phone_only:
+        relevant_service = await find_relevant_service(session, question_text)
+        if relevant_service:
+            price_fmt = f"{relevant_service.price:,.0f} so'm".replace(",", " ")
+
+            # Rule: Ask for phone number FIRST before sending payment details
+            if not client_user.phone_number:
+                prompt_phone_text = (
+                    f"💼 <b>{relevant_service.title_uz}</b>\n"
+                    f"💵 Rasmiy xizmat narxi: <b>{price_fmt}</b>\n\n"
+                    "Xizmatni rasmiylashtirish va to'lov rekvizitlarini yuborishimiz uchun, "
+                    "iltimos, <b>telefon raqamingizni</b> yozib qoldiring (masalan: <code>+998901234567</code>):"
+                )
+                await message.answer(text=prompt_phone_text)
+                await ChatService.log_message(
+                    session=session,
+                    user_id=client_user.id,
+                    telegram_id=bot.id,
+                    sender_type="bot",
+                    text=prompt_phone_text,
+                    is_business=True,
+                )
+                return
+
+            # Client already provided phone number: Send payment details and ask for cheque photo
+            org_settings = await OrgSettingsService.get_settings(session)
+            tx = await PaymentService.create_transaction(
+                session=session,
+                user=client_user,
+                amount=relevant_service.price,
+                payment_method="p2p_card",
+                transaction_ref=relevant_service.title_uz,
+            )
+
+            p2p_msg = (
+                f"💳 <b>To'lov ma'lumotlari (Tranzaksiya #{tx.id})</b>\n\n"
+                f"💼 Xizmat: <b>{relevant_service.title_uz}</b>\n"
+                f"💵 To'lov summasi: <b>{price_fmt}</b>\n\n"
+                f"💳 Karta raqami: <code>{org_settings.card_number}</code>\n"
+                f"👤 Qabul qiluvchi: <b>{org_settings.card_holder}</b>\n\n"
+                "<i>To'lovni amalga oshirgach, to'lov cheki (skrinshot)ni ushbu chatga yuboring. "
+                "Huquqshunos to'lovni tasdiqlashi bilan xizmat ijrosi darhol boshlanadi.</i>"
+            )
+            await message.answer(text=p2p_msg)
+            await ChatService.log_message(
+                session=session,
+                user_id=client_user.id,
+                telegram_id=bot.id,
+                sender_type="bot",
+                text=p2p_msg,
+                is_business=True,
+            )
+            return
+
+    # =========================================================================
+    # D. GENERATE UNDETECTABLE HUMAN ATTORNEY LEGAL REPLY
+    # =========================================================================
     if question_text:
         typing_delay = min(max(len(question_text) * 0.01, 1.5), 3.5)
         try:
@@ -163,4 +421,3 @@ async def handle_business_message(
 
         except Exception as e:  # noqa: BLE001
             logger.error("Failed to generate or send business reply: %s", e)
-

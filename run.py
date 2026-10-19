@@ -46,6 +46,14 @@ async def init_database() -> None:
             except Exception as exc:  # noqa: BLE001
                 logger.debug("Column %s check or migration note: %s", col, exc)
 
+        try:
+            if "postgres" in settings.DATABASE_URL:
+                await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS business_connection_id VARCHAR(255)"))
+            else:
+                await conn.execute(text("ALTER TABLE users ADD COLUMN business_connection_id VARCHAR(255)"))
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("Column business_connection_id check note: %s", exc)
+
     # Seed if legal chunks empty
     async with AsyncSessionLocal() as session:
         result = await session.execute(select(func.count(LegalChunk.id)))

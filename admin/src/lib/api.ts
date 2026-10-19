@@ -330,3 +330,21 @@ export const deleteSystemAccess = (id: number) =>
     method: "DELETE",
   });
 
+// Organization Profile & Payment Settings
+export interface OrgSettings {
+  id: number;
+  card_number: string;
+  card_holder: string;
+  contact_phone: string;
+  office_address: string;
+  working_hours: string;
+}
+
+export const getOrgSettings = () => fetchApi<OrgSettings>("/settings/organization");
+export const updateOrgSettings = (data: Partial<Omit<OrgSettings, "id">>) =>
+  fetchApi<OrgSettings>("/settings/organization", {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+
+

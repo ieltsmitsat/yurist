@@ -32,6 +32,7 @@ class User(Base, TimestampMixin):
     phone_number: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     language: Mapped[str] = mapped_column(String(10), default="uz", nullable=False)
     lead_status: Mapped[str] = mapped_column(String(50), default="new", nullable=False)
+    business_connection_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # Referral system
     referred_by_id: Mapped[int | None] = mapped_column(

@@ -10,16 +10,31 @@ import {
   createSystemAccess,
   updateSystemAccess,
   deleteSystemAccess,
+  getOrgSettings,
+  updateOrgSettings,
   type BotSettings,
   type Prompts,
   type SystemAccessItem,
+  type OrgSettings,
 } from "@/lib/api";
 
 type RoleFilter = "all" | "lawyer" | "group" | "admin";
-type SettingsSection = "bot" | "access" | "prompts";
+type SettingsSection = "organization" | "bot" | "access" | "prompts";
 
 export default function SettingsPage() {
-  const [activeSection, setActiveSection] = useState<SettingsSection>("bot");
+  const [activeSection, setActiveSection] = useState<SettingsSection>("organization");
+
+  // Organization & Payment Settings State
+  const [orgSettings, setOrgSettings] = useState<OrgSettings>({
+    id: 1,
+    card_number: "9860 0001 2345 6789",
+    card_holder: "Yuridik Xizmatlar",
+    contact_phone: "+998 (71) 200-00-00",
+    office_address: "Toshkent sh., Chilonzor tumani, Bunyodkor shoh ko'chasi, 15-uy",
+    working_hours: "Dushanba — Shanba, 09:00 dan 18:00 gacha",
+  });
+  const [savingOrg, setSavingOrg] = useState(false);
+  const [orgMessage, setOrgMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   // Access Management State
   const [accessList, setAccessList] = useState<SystemAccessItem[]>([]);
@@ -68,10 +83,11 @@ export default function SettingsPage() {
 
   const fetchData = async () => {
     try {
-      const [settingsRes, promptsRes, accessRes] = await Promise.allSettled([
+      const [settingsRes, promptsRes, accessRes, orgRes] = await Promise.allSettled([
         getBotSettings(),
         getPrompts(),
         getSystemAccessList(),
+        getOrgSettings(),
       ]);
 
       if (settingsRes.status === "fulfilled" && settingsRes.value) {
@@ -92,10 +108,30 @@ export default function SettingsPage() {
       } else if (accessRes.status === "rejected") {
         console.warn("Could not fetch access list from API:", accessRes.reason);
       }
+
+      if (orgRes.status === "fulfilled" && orgRes.value) {
+        setOrgSettings(orgRes.value);
+      }
     } catch (error) {
       console.error("Failed to fetch settings data:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveOrgSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingOrg(true);
+    setOrgMessage(null);
+    try {
+      const updated = await updateOrgSettings(orgSettings);
+      setOrgSettings(updated);
+      setOrgMessage({ type: "success", text: "✅ Tashkilot va to'lov ma'lumotlari muvaffaqiyatli saqlandi!" });
+    } catch (error: any) {
+      console.error("Save org settings error:", error);
+      setOrgMessage({ type: "error", text: `Xatolik: ${error.message || "Tarmoq xatosi"}` });
+    } finally {
+      setSavingOrg(false);
     }
   };
 
@@ -316,6 +352,17 @@ export default function SettingsPage() {
         <div className="flex items-center gap-2 border-b border-slate-200 pb-3 overflow-x-auto">
           <button
             type="button"
+            onClick={() => setActiveSection("organization")}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all cursor-pointer ${
+              activeSection === "organization"
+                ? "bg-indigo-600 text-white shadow-sm"
+                : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+            }`}
+          >
+            <span>🏢</span> Tashkilot va To&apos;lov
+          </button>
+          <button
+            type="button"
             onClick={() => setActiveSection("bot")}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all cursor-pointer ${
               activeSection === "bot"
@@ -350,7 +397,152 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* 2. Unified Access Management Section */}
+      {/* 2. Organization & Payment Profile Settings Section */}
+      {activeSection === "organization" && (
+        <div className="space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                <span>🏢</span> Tashkilot va To&apos;lov Rekvizitlari
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Botda va shaxsiy lichkada mijozlarga taqdim etiladigan rasmiy to&apos;lov kartasi, aloqa telefoni va ofis manzili
+              </p>
+            </div>
+          </div>
+
+          {orgMessage && (
+            <div
+              className={`p-4 rounded-xl text-sm font-semibold flex items-center justify-between border ${
+                orgMessage.type === "success"
+                  ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                  : "bg-red-50 text-red-800 border-red-200"
+              }`}
+            >
+              <span>{orgMessage.text}</span>
+              <button
+                type="button"
+                onClick={() => setOrgMessage(null)}
+                className="text-xs opacity-60 hover:opacity-100 font-bold ml-4"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+            <form onSubmit={handleSaveOrgSettings}>
+              <div className="divide-y divide-slate-100">
+                {/* 1. Karta raqami */}
+                <div className="p-6">
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                    💳 To&apos;lov Kartasi Raqami (P2P Karta)
+                  </label>
+                  <input
+                    type="text"
+                    value={orgSettings.card_number}
+                    onChange={(e) =>
+                      setOrgSettings({ ...orgSettings, card_number: e.target.value })
+                    }
+                    placeholder="Masalan: 9860 0001 2345 6789 yoki 8600 ..."
+                    className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm font-mono focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    required
+                  />
+                  <p className="mt-1.5 text-xs text-slate-400">
+                    Mijoz xizmat sotib olmoqchi bo&apos;lganda bot va shaxsiy chatda avtomatik taqdim etiladi.
+                  </p>
+                </div>
+
+                {/* 2. Karta egasi / Qabul qiluvchi */}
+                <div className="p-6">
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                    👤 Qabul Qiluvchi (Karta Egasi F.I.Sh yoki Tashkilot)
+                  </label>
+                  <input
+                    type="text"
+                    value={orgSettings.card_holder}
+                    onChange={(e) =>
+                      setOrgSettings({ ...orgSettings, card_holder: e.target.value })
+                    }
+                    placeholder="Masalan: Yuridik Xizmatlar yoki Iqboljon A."
+                    className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    required
+                  />
+                  <p className="mt-1.5 text-xs text-slate-400">
+                    Karta raqami yonida ko&apos;rsatiladigan ism yoki kompaniya nomi.
+                  </p>
+                </div>
+
+                {/* 3. Rasmiy telefon raqam */}
+                <div className="p-6">
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                    📞 Rasmiy Aloqa Telefoni
+                  </label>
+                  <input
+                    type="text"
+                    value={orgSettings.contact_phone}
+                    onChange={(e) =>
+                      setOrgSettings({ ...orgSettings, contact_phone: e.target.value })
+                    }
+                    placeholder="Masalan: +998 (71) 200-00-00"
+                    className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    required
+                  />
+                  <p className="mt-1.5 text-xs text-slate-400">
+                    Botdagi &quot;Huquqshunos bilan bog&apos;lanish&quot; tugmasi va ma&apos;lumotnomalarda ko&apos;rsatiladi.
+                  </p>
+                </div>
+
+                {/* 4. Ofis manzili */}
+                <div className="p-6">
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                    🏢 Ofis / Advokatlik Byurosi Manzili
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={orgSettings.office_address}
+                    onChange={(e) =>
+                      setOrgSettings({ ...orgSettings, office_address: e.target.value })
+                    }
+                    placeholder="Masalan: Toshkent sh., Chilonzor tumani, Bunyodkor shoh ko'chasi, 15-uy"
+                    className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    required
+                  />
+                </div>
+
+                {/* 5. Ish vaqti */}
+                <div className="p-6">
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                    ⏰ Ish Vaqti Tartibi
+                  </label>
+                  <input
+                    type="text"
+                    value={orgSettings.working_hours}
+                    onChange={(e) =>
+                      setOrgSettings({ ...orgSettings, working_hours: e.target.value })
+                    }
+                    placeholder="Masalan: Dushanba — Shanba, 09:00 dan 18:00 gacha"
+                    className="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex justify-end">
+                <button
+                  type="submit"
+                  disabled={savingOrg}
+                  className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                >
+                  {savingOrg ? "Saqlanmoqda..." : "Ma'lumotlarni Saqlash"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Unified Access Management Section */}
       {activeSection === "access" && (
         <div className="space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">

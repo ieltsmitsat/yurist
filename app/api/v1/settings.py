@@ -231,3 +231,47 @@ async def update_prompts(payload: PromptsUpdate) -> dict[str, Any]:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update prompts: {e}",
         )
+
+
+# --- Organization & Payment Profile Settings ---
+
+class OrgSettingsResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    card_number: str
+    card_holder: str
+    contact_phone: str
+    office_address: str
+    working_hours: str
+
+
+class OrgSettingsUpdate(BaseModel):
+    card_number: str | None = None
+    card_holder: str | None = None
+    contact_phone: str | None = None
+    office_address: str | None = None
+    working_hours: str | None = None
+
+
+@router.get("/organization", response_model=OrgSettingsResponse)
+async def get_org_settings(
+    session: AsyncSession = Depends(get_db_session),  # noqa: B008
+) -> Any:
+    """Get organization contact and payment card settings."""
+    from app.services.org_settings_service import OrgSettingsService
+
+    return await OrgSettingsService.get_settings(session)
+
+
+@router.put("/organization", response_model=OrgSettingsResponse)
+async def update_org_settings(
+    payload: OrgSettingsUpdate,
+    session: AsyncSession = Depends(get_db_session),  # noqa: B008
+) -> Any:
+    """Update organization contact and payment card settings."""
+    from app.services.org_settings_service import OrgSettingsService
+
+    update_dict = payload.model_dump(exclude_unset=True)
+    return await OrgSettingsService.update_settings(session, **update_dict)
+

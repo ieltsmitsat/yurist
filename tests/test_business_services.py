@@ -10,11 +10,13 @@ from app.db.base import Base
 from app.db.models.appointment import Appointment
 from app.db.models.attachment import Attachment
 from app.db.models.inquiry import Inquiry
+from app.db.models.org_settings import OrgSettings
 from app.db.models.service import Service
 from app.db.models.sos import SOSRequest
 from app.db.models.system_access import SystemAccess
 from app.db.models.transaction import Transaction
 from app.db.models.user import User
+from app.services.org_settings_service import OrgSettingsService
 from app.services.payment_service import PaymentService
 from app.services.referral_service import ReferralService
 from app.services.user_service import UserService
@@ -41,6 +43,7 @@ async def setup_db():
             Transaction.__table__,
             SOSRequest.__table__,
             SystemAccess.__table__,
+            OrgSettings.__table__,
         ]
         await conn.run_sync(Base.metadata.create_all, tables=tables)
     yield
@@ -345,4 +348,42 @@ async def test_lawyer_table_unlimited_questions_for_existing_user():
         bal = await UserService.decrement_question(session, user)
         assert bal >= 999999
         assert user.free_questions_left >= 999999
+
+
+@pytest.mark.asyncio
+async def test_org_settings_and_business_helpers():
+    """Test OrgSettingsService and business chat payment helper utilities."""
+    from app.bot.handlers.business.messages import extract_phone, is_service_payment_intent
+
+    async with TestingSessionLocal() as session:
+        # Default initialization
+        settings_rec = await OrgSettingsService.get_settings(session)
+        assert settings_rec is not None
+        assert settings_rec.card_number == "9860 0001 2345 6789"
+        assert settings_rec.card_holder == "Yuridik Xizmatlar"
+
+        # Update
+        updated = await OrgSettingsService.update_settings(
+            session,
+            card_number="8600 9999 8888 7777",
+            card_holder="Advokat Iqboljon",
+            contact_phone="+998901234567",
+        )
+        assert updated.card_number == "8600 9999 8888 7777"
+        assert updated.card_holder == "Advokat Iqboljon"
+
+        # Re-fetch
+        refetched = await OrgSettingsService.get_settings(session)
+        assert refetched.card_number == "8600 9999 8888 7777"
+
+    # Helpers
+    assert extract_phone("Mening raqamim +998901234567") == "+998901234567"
+    assert extract_phone("tel: 99893 111 22 33") == "+998931112233"
+    assert extract_phone("telefon raqam yo'q") is None
+
+    assert is_service_payment_intent("xizmat narxi qancha?") is True
+    assert is_service_payment_intent("Karta raqam bering") is True
+    assert is_service_payment_intent("To'lov qildim, chekni qabul qiling") is True
+    assert is_service_payment_intent("Bugun ob-havo qanday?") is False
+
 

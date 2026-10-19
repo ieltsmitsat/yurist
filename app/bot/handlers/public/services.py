@@ -225,20 +225,25 @@ async def handle_p2p_payment(
         except Exception as e:  # noqa: BLE001
             logger.warning("Could not notify admin about transaction #%d: %s", tx.id, e)
 
+    from app.services.org_settings_service import OrgSettingsService
+    org_settings = await OrgSettingsService.get_settings(session)
+    card_number = org_settings.card_number
+    card_holder = org_settings.card_holder
+
     p2p_text = (
         f"💳 <b>Karta orqali to'lov (Tranzaksiya #{tx.id})</b>\n\n"
         f"💼 Xizmat: <b>{service.title_uz}</b>\n"
         f"💵 To'lov summasi: <b>{price_fmt}</b>\n\n"
-        "💳 Karta raqami: <code>9860 0001 2345 6789</code>\n"
-        "👤 Qabul qiluvchi: <b>Yuridik Xizmatlar</b>\n\n"
+        f"💳 Karta raqami: <code>{card_number}</code>\n"
+        f"👤 Qabul qiluvchi: <b>{card_holder}</b>\n\n"
         "<i>To'lovni amalga oshirgach, to'lov cheki (skrinshot yoki PDF)ni ushbu bot chatiga yuboring. "
         "Huquqshunos to'lovni tasdiqlashi bilan xizmat ijrosi boshlanadi.</i>"
         if lang == "uz"
         else f"💳 <b>Оплата по карте (Транзакция #{tx.id})</b>\n\n"
         f"💼 Услуга: <b>{service.title_ru}</b>\n"
         f"💵 Сумма к оплате: <b>{price_fmt}</b>\n\n"
-        "💳 Номер карты: <code>9860 0001 2345 6789</code>\n"
-        "👤 Получатель: <b>Юридические Услуги</b>\n\n"
+        f"💳 Номер карты: <code>{card_number}</code>\n"
+        f"👤 Получатель: <b>{card_holder}</b>\n\n"
         "<i>После оплаты отправьте квитанцию или чек в этот чат. "
         "После подтверждения юристом оказание услуги начнется незамедлительно.</i>"
     )
@@ -309,23 +314,32 @@ async def handle_stars_payment(
 
 
 @router.callback_query(F.data == "contact_lawyer")
-async def handle_contact_lawyer(callback: CallbackQuery, user: User | None = None) -> None:
-    """Provide lawyer direct contact information."""
+async def handle_contact_lawyer(
+    callback: CallbackQuery, session: AsyncSession, user: User | None = None
+) -> None:
+    """Provide lawyer direct contact information from dynamic OrgSettings."""
     if not callback.message:
         return
+
+    from app.services.org_settings_service import OrgSettingsService
+
+    org_settings = await OrgSettingsService.get_settings(session)
+    contact_phone = org_settings.contact_phone
+    office_address = org_settings.office_address
+    working_hours = org_settings.working_hours
 
     lang = user.language if user else "uz"
     text = (
         "👤 <b>Huquqshunos bilan to'g'ridan-to'g'ri aloqa:</b>\n\n"
-        "📞 Telefon: +998 (71) 200-00-00\n"
-        "🏢 Manzil: Toshkent sh., Chilonzor tumani, Bunyodkor shoh ko'chasi, 15-uy\n"
-        "⏰ Ish vaqti: Dushanba — Shanba, 09:00 dan 18:00 gacha\n\n"
+        f"📞 Telefon: {contact_phone}\n"
+        f"🏢 Manzil: {office_address}\n"
+        f"⏰ Ish vaqti: {working_hours}\n\n"
         "<i>Shoshilinch vaziyatlarda Favqulodda SOS bo'limidan foydalaning.</i>"
         if lang == "uz"
         else "👤 <b>Прямой контакт с юристом:</b>\n\n"
-        "📞 Телефон: +998 (71) 200-00-00\n"
-        "🏢 Адрес: г. Ташкент, Чиланзарский р-н, пр-т Бунёдкор, 15\n"
-        "⏰ График: Понедельник — Суббота, с 09:00 до 18:00\n\n"
+        f"📞 Телефон: {contact_phone}\n"
+        f"🏢 Адрес: {office_address}\n"
+        f"⏰ График: {working_hours}\n\n"
         "<i>В экстренных случаях используйте кнопку SOS.</i>"
     )
     await callback.answer()
@@ -380,9 +394,19 @@ async def handle_payment_approval(
             "Оплата принята. В ближайшее время юрист свяжется с вами для оказания услуги."
         )
         try:
-            await bot.send_message(chat_id=target_user.telegram_id, text=client_msg)
-        except Exception as e:  # noqa: BLE001
-            logger.warning("Could not send payment confirmation to user %s: %s", target_user.telegram_id, e)
+            if getattr(target_user, "business_connection_id", None):
+                await bot.send_message(
+                    chat_id=target_user.telegram_id,
+                    text=client_msg,
+                    business_connection_id=target_user.business_connection_id,
+                )
+            else:
+                await bot.send_message(chat_id=target_user.telegram_id, text=client_msg)
+        except Exception:  # noqa: BLE001
+            try:
+                await bot.send_message(chat_id=target_user.telegram_id, text=client_msg)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("Could not send payment confirmation to user %s: %s", target_user.telegram_id, e)
 
     # 2. Update message in group topic with "Ish bajarildi" button
     await callback.answer("To'lov tasdiqlandi! Mijozga xabar yetkazildi.", show_alert=True)
@@ -476,13 +500,28 @@ async def handle_service_completed(
 
         kb = service_fulfillment_kb(tx_id=tx_id, ref_link=ref_link, lang=user_lang)
         try:
-            await bot.send_message(
-                chat_id=target_user.telegram_id,
-                text=completion_text,
-                reply_markup=kb,
-            )
-        except Exception as e:  # noqa: BLE001
-            logger.warning("Could not send service fulfillment to user %s: %s", target_user.telegram_id, e)
+            if getattr(target_user, "business_connection_id", None):
+                await bot.send_message(
+                    chat_id=target_user.telegram_id,
+                    text=completion_text,
+                    reply_markup=kb,
+                    business_connection_id=target_user.business_connection_id,
+                )
+            else:
+                await bot.send_message(
+                    chat_id=target_user.telegram_id,
+                    text=completion_text,
+                    reply_markup=kb,
+                )
+        except Exception:  # noqa: BLE001
+            try:
+                await bot.send_message(
+                    chat_id=target_user.telegram_id,
+                    text=completion_text,
+                    reply_markup=kb,
+                )
+            except Exception as e:  # noqa: BLE001
+                logger.warning("Could not send service fulfillment to user %s: %s", target_user.telegram_id, e)
 
     # 2. Update topic message to completed state without buttons
     await callback.answer("Xizmat bajarildi deb belgilandi! Mijozga baholash yuborildi.", show_alert=True)
@@ -604,9 +643,19 @@ async def handle_payment_rejection(
             "либо свяжитесь с юристом."
         )
         try:
-            await bot.send_message(chat_id=target_user.telegram_id, text=client_msg)
-        except Exception as e:  # noqa: BLE001
-            logger.warning("Could not send payment rejection to user %s: %s", target_user.telegram_id, e)
+            if getattr(target_user, "business_connection_id", None):
+                await bot.send_message(
+                    chat_id=target_user.telegram_id,
+                    text=client_msg,
+                    business_connection_id=target_user.business_connection_id,
+                )
+            else:
+                await bot.send_message(chat_id=target_user.telegram_id, text=client_msg)
+        except Exception:  # noqa: BLE001
+            try:
+                await bot.send_message(chat_id=target_user.telegram_id, text=client_msg)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("Could not send payment rejection to user %s: %s", target_user.telegram_id, e)
 
     # 2. Update message in group topic (remove buttons and show rejected badge)
     await callback.answer("To'lov bekor qilindi. Mijozga xabar yetkazildi.", show_alert=True)
