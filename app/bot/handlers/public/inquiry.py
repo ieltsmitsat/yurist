@@ -382,11 +382,13 @@ async def process_aggregated_inquiry(
         )
 
         if is_personal_identity_inquiry(combined_text):
-            personal_reply = (
-                "Afsusku shaxsiy savollaringizga javob bera olmayman. Agar huquqiuy masalada savollaringiz bo'lsa batafsil yozib qoldiring"
-                if lang == "uz"
-                else "К сожалению, я не могу отвечать на личные вопросы. Если у вас есть правовые вопросы, подробно опишите вашу ситуацию."
-            )
+            low = combined_text.lower()
+            if any(en_w in low for en_w in ["how old", "who are you", "who are u", "what is your", "your age", "about you"]):
+                personal_reply = "Unfortunately, I cannot answer personal questions. If you have any legal questions or issues, please describe them in detail."
+            elif lang == "ru" or any(ru_w in low for ru_w in ["кто вы", "сколько вам лет", "сколько тебе лет", "о себе"]):
+                personal_reply = "К сожалению, я не могу отвечать на личные вопросы. Если у вас есть правовые вопросы, подробно опишите вашу ситуацию."
+            else:
+                personal_reply = "Afsusku shaxsiy savollaringizga javob bera olmayman. Agar huquqiuy masalada savollaringiz bo'lsa batafsil yozib qoldiring"
             await last_message.answer(personal_reply)
             await ChatService.log_message(
                 session=session,

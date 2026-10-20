@@ -45,8 +45,8 @@ def extract_phone(text: str) -> str | None:
     return raw
 
 
-def is_general_services_inquiry(text: str) -> bool:
-    """Check if the user is asking about general services catalog, pricing, or wants consultation."""
+def is_personal_identity_inquiry(text: str) -> bool:
+    """Check if the user is asking about the lawyer's personal identity, age, background, or personal life."""
     q = text.lower().strip()
     clean_no_punct = re.sub(r"[^\w\s]", " ", q)
     words = clean_no_punct.split()
@@ -54,10 +54,222 @@ def is_general_services_inquiry(text: str) -> bool:
     if not words:
         return False
 
+    direct_patterns = [
+        # Identity / Name
+        "kimsiz",
+        "kimsan",
+        "kim bu",
+        "kim siz",
+        "kim san",
+        "kim u",
+        "ismingiz nima",
+        "ismingiz",
+        "isming nima",
+        "isming",
+        "ismiz",
+        "familiyangiz",
+        "familiya",
+        "otangiz",
+        "sharifingiz",
+        "o'zingiz haqingizda",
+        "ozingiz haqingizda",
+        "o'zingiz haqingizda gapiring",
+        "ozingiz haqingizda gapiring",
+        "o'zingiz haqingizda ma'lumot",
+        "ozingiz haqingizda malumot",
+        "haqingizda gapiring",
+        "haqingizda malumot",
+        "haqingizda ma'lumot",
+        "tarjimai hol",
+        "biografiya",
+        # Age / Birth year
+        "necha yosh",
+        "nechchi yosh",
+        "nechi yosh",
+        "necha yoshsiz",
+        "nechchi yoshsiz",
+        "nechi yoshsiz",
+        "necha yoshdasiz",
+        "necha yoshdasan",
+        "yosh nechada",
+        "yoshing nechada",
+        "yoshingiz nechada",
+        "yosh nechchida",
+        "yoshing nechchida",
+        "yoshingiz nechchida",
+        "yoshingiz nechida",
+        "yoshingiz necha",
+        "yoshing nechida",
+        "yoshing necha",
+        "yoshdasiz",
+        "yoshdasan",
+        "nechanchi yil",
+        "nechanchi yilsiz",
+        "nechanchi yilsan",
+        "nechanchi yilda",
+        "nechinchi yil",
+        "qaysi yilsiz",
+        "qaysi yilsan",
+        "qaysi yil tug'ilgan",
+        "tug'ilgan yilingiz",
+        "tug'ilgan yil",
+        "tugilgan yilingiz",
+        "tugilgan yil",
+        "qachon tug'ilgansiz",
+        "qachon tugilgan",
+        # Personal life / Family / Location
+        "qayerdansiz",
+        "qattansiz",
+        "qayerliksiz",
+        "qayerdansan",
+        "qayerda yashaysiz",
+        "qayerda turasiz",
+        "uylanganmisiz",
+        "uylangan",
+        "oilalimisiz",
+        "oilangiz",
+        "turmush qurganmisiz",
+        "erga tekkanmisiz",
+        "farzandlaringiz",
+        "farzand",
+        "bolalaringiz",
+        "shaxsiy hayot",
+        "shaxsiy ma'lumot",
+        "shaxsiy malumot",
+        "shaxsiy savol",
+        # Complaints / Meta inquiries about personal question
+        "nimaga yoshing",
+        "nega yoshing",
+        "yoshimni so'rasam",
+        "yosh haqida",
+        "shaxsiy savol berdim",
+        "shaxsiy savolimga",
+        # Russian
+        "кто вы",
+        "кто ты",
+        "кто это",
+        "как вас зовут",
+        "как тебя зовут",
+        "ваше имя",
+        "твое имя",
+        "расскажи о себе",
+        "расскажите о себе",
+        "биография",
+        "сколько вам лет",
+        "сколько тебе лет",
+        "сколько лет",
+        "какой возраст",
+        "ваш возраст",
+        "твой возраст",
+        "какого года",
+        "какой год рождения",
+        "когда родился",
+        "когда родились",
+        "дата рождения",
+        "год рождения",
+        "откуда вы",
+        "откуда ты",
+        "где живешь",
+        "где вы живете",
+        "где живете",
+        "женат",
+        "замужем",
+        "семейное положение",
+        "семейный статус",
+        "семья",
+        "дети",
+        "личная жизнь",
+        "личные данные",
+        "личный вопрос",
+        # English
+        "how old are you",
+        "how old are u",
+        "how old r u",
+        "how old",
+        "what is your age",
+        "what's your age",
+        "your age",
+        "when were you born",
+        "birth date",
+        "birth year",
+        "who are you",
+        "who are u",
+        "who r u",
+        "who is this",
+        "what is your name",
+        "what's your name",
+        "tell me about yourself",
+        "about yourself",
+        "where are you from",
+        "where do you live",
+        "are you married",
+        "do you have a family",
+        "do you have children",
+    ]
+
+    if any(p in q for p in direct_patterns):
+        return True
+
+    # 1. Any mention of "yosh" (age) in short queries (e.g. "yoshingiz?", "yoshiz nechchi?", "yoshiz?")
+    if any(w in words for w in ["yoshsiz", "yoshdasiz", "yoshdasan", "yoshingiz", "yoshing", "yoshiz"]) and len(words) <= 6:
+        return True
+
+    # 2. Short questions with "yil" (birth year), e.g. "nechi yilsiz", "yilingiz?"
+    if any(w in words for w in ["yilsiz", "yilsan"]) and len(words) <= 6:
+        return True
+
+    # 3. Short question about who the bot/person is
+    if len(words) <= 4:
+        if any(w in words for w in ["kimsiz", "kimsan"]) or ("kim" in words and any(w in words for w in ["bu", "siz", "san", "u"])):
+            return True
+        if "кто" in words and any(w in words for w in ["вы", "ты", "это"]):
+            return True
+        if "who" in words and any(w in words for w in ["you", "u", "this"]):
+            return True
+
+    return False
+
+
+def is_general_services_inquiry(text: str) -> bool:
+    """Check if the user is asking about general services catalog, pricing, or wants consultation."""
+    if is_personal_identity_inquiry(text):
+        return False
+
+    q = text.lower().strip()
+    clean_no_punct = re.sub(r"[^\w\s]", " ", q)
+    words = clean_no_punct.split()
+
+    if not words:
+        return False
+
+    # Check if the user is complaining / asking meta-questions about why prices or services were sent
+    complaint_triggers = [
+        "nimaga",
+        "nega",
+        "sabab",
+        "so'ramadim",
+        "soramadim",
+        "kerakmas",
+        "tashlayapsan",
+        "tashlayapsiz",
+        "yuboryapsan",
+        "yuboryapsiz",
+        "почему",
+        "зачем",
+        "не просил",
+        "не спрашивал",
+        "why",
+        "didn't ask",
+    ]
+    if any(c in q for c in complaint_triggers) and any(
+        term in q for term in ["narx", "xizmat", "tarif", "price", "цен"]
+    ):
+        return False
+
     # 1. Any combination of service-related root + price/cost-related root
     # Handles typos like: xizmatoz, xizmatiz, xizmat, xizmatlar, qanfha, qancha, nechpul, narx, etc.
-    price_pattern = r"\b(?:narx|qanch|qanfh|qanca|qanqa|nech|pul|summa|baho|qiymat|haq|haqqi|почем|скольк|цен|стоим|прайс|тариф)\w*"
-    service_pattern = r"\b(?:xizm|xzm|konsult|maslahat|advokat|yurist|uslug|услуг|консульт)\w*"
+    price_pattern = r"\b(?:narx|qanch|qanfh|qanca|nechpul|summa|baho|qiymat|почем|скольк|цен|стоим|прайс|тариф|pricing|price|tariff|cost)\w*"
+    service_pattern = r"\b(?:xizm|xzm|konsult|maslahat|advokat|yurist|uslug|услуг|консульт|consult)\w*"
 
     has_price_word = any(bool(re.search(price_pattern, w)) for w in words)
     has_service_word = any(bool(re.search(service_pattern, w)) for w in words)
@@ -79,6 +291,7 @@ def is_general_services_inquiry(text: str) -> bool:
             "какая цена",
             "какие расценки",
             "сколько возьмете",
+            "how much",
         ]
     )
 
@@ -122,12 +335,40 @@ def is_general_services_inquiry(text: str) -> bool:
         "прайс",
         "тарифы",
         "почем",
+        "how much does it cost",
+        "what is the price",
     ]
     if any(p in q for p in standalone_price_phrases):
         return True
 
     # If the message is short (<= 4 words) and contains a price root (e.g. "qancha?", "qanfha?", "narxi?"):
-    if len(words) <= 4 and (has_price_word or has_price_phrase):
+    # Ensure it's not a unit/noun question like "necha yosh", "necha kun", "nechta bola"
+    non_price_units = {
+        "yosh",
+        "yoshsiz",
+        "yoshda",
+        "yoshingiz",
+        "yoshing",
+        "yoshiz",
+        "yil",
+        "yilsiz",
+        "yildasiz",
+        "yilingiz",
+        "kun",
+        "oy",
+        "soat",
+        "bola",
+        "kishi",
+        "odam",
+        "hujjat",
+        "modda",
+        "qonun",
+    }
+    if (
+        len(words) <= 4
+        and (has_price_word or has_price_phrase)
+        and not any(w in non_price_units for w in words)
+    ):
         return True
 
     # 3. Explicit service catalog / consultation requests
@@ -194,73 +435,6 @@ def is_general_services_inquiry(text: str) -> bool:
             "нужен адвокат",
         ]
         if any(p in q for p in short_intent_phrases):
-            return True
-
-    return False
-
-
-def is_personal_identity_inquiry(text: str) -> bool:
-    """Check if the user is asking about the lawyer's personal identity, background, or personal life."""
-    q = text.lower().strip()
-    clean_no_punct = re.sub(r"[^\w\s]", " ", q)
-    words = clean_no_punct.split()
-
-    if not words:
-        return False
-
-    direct_patterns = [
-        "kimsiz",
-        "kimsan",
-        "kim bu",
-        "kim siz",
-        "kim san",
-        "o'zingiz haqingizda",
-        "ozingiz haqingizda",
-        "o'zingiz haqingizda gapiring",
-        "ozingiz haqingizda gapiring",
-        "o'zingiz haqingizda ma'lumot",
-        "ozingiz haqingizda malumot",
-        "haqingizda gapiring",
-        "haqingizda malumot",
-        "haqingizda ma'lumot",
-        "yoshingiz nechida",
-        "yoshingiz necha",
-        "yoshing nechida",
-        "qayerdansiz",
-        "qattansiz",
-        "qayerliksiz",
-        "qayerdansan",
-        "uylanganmisiz",
-        "oilalimisiz",
-        "oilangiz",
-        "shaxsiy hayot",
-        "shaxsiy ma'lumot",
-        "shaxsiy malumot",
-        "shaxsiy savol",
-        "кто вы",
-        "кто ты",
-        "кто это",
-        "расскажи о себе",
-        "расскажите о себе",
-        "сколько вам лет",
-        "сколько тебе лет",
-        "откуда вы",
-        "откуда ты",
-        "где живешь",
-        "где вы живете",
-        "женат",
-        "замужем",
-        "личная жизнь",
-        "личные данные",
-    ]
-
-    if any(p in q for p in direct_patterns):
-        return True
-
-    if len(words) <= 4:
-        if any(w in words for w in ["kimsiz", "kimsan"]) or ("kim" in words and any(w in words for w in ["bu", "siz", "san", "u"])):
-            return True
-        if "кто" in words and any(w in words for w in ["вы", "ты", "это"]):
             return True
 
     return False
@@ -769,11 +943,13 @@ async def handle_business_message(
 
     # 2.7. Check if user is asking personal questions about the lawyer's identity/personal life
     if is_personal_identity_inquiry(question_text):
-        personal_reply = (
-            "Afsusku shaxsiy savollaringizga javob bera olmayman. Agar huquqiuy masalada savollaringiz bo'lsa batafsil yozib qoldiring"
-            if client_user.language == "uz"
-            else "К сожалению, я не могу отвечать на личные вопросы. Если у вас есть правовые вопросы, подробно опишите вашу ситуацию."
-        )
+        low = question_text.lower()
+        if any(en_w in low for en_w in ["how old", "who are you", "who are u", "what is your", "your age", "about you"]):
+            personal_reply = "Unfortunately, I cannot answer personal questions. If you have any legal questions or issues, please describe them in detail."
+        elif client_user.language == "ru" or any(ru_w in low for ru_w in ["кто вы", "сколько вам лет", "сколько тебе лет", "о себе"]):
+            personal_reply = "К сожалению, я не могу отвечать на личные вопросы. Если у вас есть правовые вопросы, подробно опишите вашу ситуацию."
+        else:
+            personal_reply = "Afsusku shaxsiy savollaringizga javob bera olmayman. Agar huquqiuy masalada savollaringiz bo'lsa batafsil yozib qoldiring"
         await message.answer(text=personal_reply)
         await ChatService.log_message(
             session=session,

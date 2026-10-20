@@ -50,9 +50,16 @@ def is_services_menu_text_trigger(message: Message) -> bool:
     if not message.text:
         return False
     t = message.text.strip().lower()
+    from app.bot.handlers.business.messages import (
+        is_general_services_inquiry,
+        is_personal_identity_inquiry,
+    )
+
+    if is_personal_identity_inquiry(t):
+        return False
+
     if t in ["💼 xizmatlar va narxlar", "💼 услуги и цены"]:
         return True
-    from app.bot.handlers.business.messages import is_general_services_inquiry
 
     return is_general_services_inquiry(t)
 

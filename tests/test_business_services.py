@@ -528,16 +528,38 @@ def test_personal_identity_inquiry_detection_and_prompts():
     assert is_personal_identity_inquiry("kim bu") is True
     assert is_personal_identity_inquiry("o'zingiz haqingizda gapiring") is True
     assert is_personal_identity_inquiry("yoshingiz nechida?") is True
+    assert is_personal_identity_inquiry("Necha yoshsiz") is True
+    assert is_personal_identity_inquiry("Nechanchi yilsiz") is True
+    assert is_personal_identity_inquiry("how old are you") is True
+    assert is_personal_identity_inquiry("how old are u") is True
+    assert is_personal_identity_inquiry("who are you") is True
+    assert is_personal_identity_inquiry("Nimaga yoshing nechchida degan savolimga yuridik xizmatlar narxlarini tashlayapsam") is True
     assert is_personal_identity_inquiry("qayerdansiz") is True
     assert is_personal_identity_inquiry("uylanganmisiz?") is True
     assert is_personal_identity_inquiry("shaxsiy ma'lumotlaringizni bering") is True
     assert is_personal_identity_inquiry("кто вы?") is True
     assert is_personal_identity_inquiry("расскажите о себе") is True
+    assert is_personal_identity_inquiry("сколько вам лет") is True
 
     # 2. Non-personal legal questions must NOT trigger personal inquiry
     assert is_personal_identity_inquiry("Aliment talab qilish tartibi qanday?") is False
     assert is_personal_identity_inquiry("Menga advokat kerak") is False
     assert is_personal_identity_inquiry("Xizmat narxi qancha?") is False
+    assert is_personal_identity_inquiry("Qanaqa hujjat kerak?") is False
+    assert is_personal_identity_inquiry("Haqqim bormi?") is False
+    assert is_personal_identity_inquiry("Pulimni qaytarib ololmayapman") is False
+
+    # 2b. is_general_services_inquiry must NOT trigger on personal questions or complaints
+    from app.bot.handlers.business.messages import is_general_services_inquiry
+    assert is_general_services_inquiry("Necha yoshsiz") is False
+    assert is_general_services_inquiry("Nechanchi yilsiz") is False
+    assert is_general_services_inquiry("how old are you") is False
+    assert is_general_services_inquiry("how old are u") is False
+    assert is_general_services_inquiry("who are you") is False
+    assert is_general_services_inquiry("Nimaga yoshing nechchida degan savolimga yuridik xizmatlar narxlarini tashlayapsam") is False
+    assert is_general_services_inquiry("Qanaqa hujjat kerak?") is False
+    assert is_general_services_inquiry("Haqqim bormi?") is False
+    assert is_general_services_inquiry("Pulimni qaytarib ololmayapman") is False
 
     # 3. Prompt contains lawyer name Iqboljon and personal rejection message
     prompts = PromptManager.get_all()
