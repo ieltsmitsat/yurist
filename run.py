@@ -9,6 +9,7 @@ from aiogram.exceptions import (
     TelegramConflictError,
     TelegramNetworkError,
     TelegramRetryAfter,
+    TelegramUnauthorizedError,
 )
 from sqlalchemy import func, select, text
 
@@ -116,10 +117,24 @@ async def main() -> None:
 
     setup_bot_dispatcher(dp)
 
-    me = await bot.get_me()
+    bot_info = None
+    try:
+        me = await bot.get_me()
+        bot_info = f"@{me.username} (ID: {me.id})"
+    except TelegramUnauthorizedError:
+        logger.error(
+            "❌ Telegram BOT_TOKEN noto'g'ri yoki bekor qilingan (Unauthorized)! "
+            "Iltimos, Railway Variables bo'limida yangi BOT_TOKEN ni o'rnating."
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Bot ma'lumotlarini yuklashda xatolik: %s", exc)
+
     logger.info("=" * 60)
     logger.info("🚀 Yurist LegalTech Bot & Web API ishga tushdi!")
-    logger.info("🤖 Bot Username: @%s (ID: %d)", me.username, me.id)
+    if bot_info:
+        logger.info("🤖 Bot Username: %s", bot_info)
+    else:
+        logger.error("🤖 Bot: Ulanmadi (BOT_TOKEN tekshirilishi kerak)")
     logger.info("🌐 FastAPI Server: http://%s:%d", settings.HOST, settings.PORT)
     logger.info(
         "🧠 AI Modeli: Google %s (Fallback: %s)",
@@ -146,6 +161,12 @@ async def main() -> None:
                 await bot.delete_webhook(drop_pending_updates=True)
                 await dp.start_polling(bot)
                 break
+            except TelegramUnauthorizedError:
+                logger.error(
+                    "❌ Telegram Unauthorized: BOT_TOKEN xato yoki bekor qilingan! "
+                    "Railway Variables'da yangi BOT_TOKEN kiritilishini kutyapti (30s)..."
+                )
+                await asyncio.sleep(30)
             except TelegramConflictError as conflict_err:
                 logger.warning(
                     "Telegram bot conflict (boshqa instansiya ishlamoqda: %s). 5 soniyadan so'ng qayta urinilmoqda...",
