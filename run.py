@@ -5,7 +5,11 @@ import asyncio
 import logging
 
 import uvicorn
-from aiogram.exceptions import TelegramNetworkError
+from aiogram.exceptions import (
+    TelegramConflictError,
+    TelegramNetworkError,
+    TelegramRetryAfter,
+)
 from sqlalchemy import func, select, text
 
 import app.db.models  # noqa: F401 - register all SQLAlchemy models
@@ -142,9 +146,21 @@ async def main() -> None:
                 await bot.delete_webhook(drop_pending_updates=True)
                 await dp.start_polling(bot)
                 break
+            except TelegramConflictError as conflict_err:
+                logger.warning(
+                    "Telegram bot conflict (boshqa instansiya ishlamoqda: %s). 5 soniyadan so'ng qayta urinilmoqda...",
+                    conflict_err,
+                )
+                await asyncio.sleep(5)
+            except TelegramRetryAfter as retry_err:
+                logger.warning("Telegram flood limit: %d soniya kutilmoqda...", retry_err.retry_after)
+                await asyncio.sleep(retry_err.retry_after)
             except TelegramNetworkError as net_err:
                 logger.warning("Telegram network glitch (%s). Reconnecting in 3s...", net_err)
                 await asyncio.sleep(3)
+            except Exception as exc:  # noqa: BLE001
+                logger.error("Unexpected error in bot polling (%s). Reconnecting in 5s...", exc)
+                await asyncio.sleep(5)
 
     await asyncio.gather(run_fastapi(), run_bot())
 
