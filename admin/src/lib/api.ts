@@ -223,6 +223,34 @@ export async function deleteHelpline(id: number): Promise<void> {
   if (!res.ok) throw new Error("Failed to delete helpline");
 }
 
+// Mandatory Subscription Channels & Groups
+export interface MandatoryChannel {
+  id: number;
+  title: string;
+  chat_id: string;
+  url: string;
+  order: number;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export const getMandatoryChannels = () => fetchApi<MandatoryChannel[]>("/channels");
+export const createMandatoryChannel = (data: Partial<MandatoryChannel>) =>
+  fetchApi<MandatoryChannel>("/channels", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+export const updateMandatoryChannel = (id: number, data: Partial<MandatoryChannel>) =>
+  fetchApi<MandatoryChannel>(`/channels/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+export const deleteMandatoryChannel = (id: number) =>
+  fetchApi<{ ok: boolean }>(`/channels/${id}`, { method: "DELETE" });
+export const toggleMandatoryChannel = (id: number) =>
+  fetchApi<MandatoryChannel>(`/channels/${id}/toggle`, { method: "PATCH" });
+
 // Chats
 export interface Dialog {
   user_id: number;

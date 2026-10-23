@@ -7,6 +7,7 @@ from app.db.models.chat_message import ChatMessage
 from app.db.models.helpline import Helpline
 from app.db.models.inquiry import Inquiry
 from app.db.models.legal_chunk import LegalChunk
+from app.db.models.mandatory_channel import MandatoryChannel
 from app.db.models.org_settings import OrgSettings
 from app.db.models.service import Service
 from app.db.models.sos import SOSRequest
@@ -22,6 +23,7 @@ __all__ = [
     "Helpline",
     "Inquiry",
     "LegalChunk",
+    "MandatoryChannel",
     "OrgSettings",
     "SOSRequest",
     "Service",

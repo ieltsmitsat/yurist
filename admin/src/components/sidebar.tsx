@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { href: "/transactions", label: "To'lovlar", icon: "💰" },
   { href: "/referrals", label: "Referral", icon: "🔗" },
   { href: "/helplines", label: "Ishonch Telefonlari", icon: "📞" },
+  { href: "/channels", label: "Majburiy Obuna", icon: "📢" },
 ];
 
 const BOTTOM_ITEMS = [

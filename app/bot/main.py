@@ -14,6 +14,7 @@ from app.bot.handlers.public.services import router as services_router
 from app.bot.handlers.public.sos import router as sos_router
 from app.bot.handlers.public.start import router as start_router
 from app.bot.middlewares.db_middleware import DbSessionMiddleware
+from app.bot.middlewares.mandatory_sub_middleware import MandatorySubscriptionMiddleware
 from app.bot.middlewares.user_middleware import UserContextMiddleware
 
 logger = logging.getLogger(__name__)
@@ -30,6 +31,8 @@ def setup_bot_dispatcher(dp: Dispatcher) -> None:
     # Middlewares
     dp.update.outer_middleware(DbSessionMiddleware())
     dp.update.outer_middleware(UserContextMiddleware())
+    dp.message.middleware(MandatorySubscriptionMiddleware())
+    dp.callback_query.middleware(MandatorySubscriptionMiddleware())
 
     # Routers
     dp.include_router(start_router)

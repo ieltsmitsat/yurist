@@ -13,6 +13,7 @@ from app.api.v1.crm import router as crm_router
 from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1.health import router as health_router
 from app.api.v1.helplines import router as helplines_router
+from app.api.v1.mandatory_channels import router as channels_router
 from app.api.v1.services import router as services_router
 from app.api.v1.settings import router as settings_router
 from app.api.v1.transactions import router as transactions_router
@@ -115,6 +116,7 @@ def create_app() -> FastAPI:
     app.include_router(dashboard_router, prefix="/api/v1")
     app.include_router(services_router, prefix="/api/v1")
     app.include_router(helplines_router, prefix="/api/v1")
+    app.include_router(channels_router, prefix="/api/v1")
     app.include_router(transactions_router, prefix="/api/v1")
     app.include_router(chats_router, prefix="/api/v1")
     app.include_router(settings_router, prefix="/api/v1")

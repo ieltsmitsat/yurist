@@ -4,6 +4,7 @@ import logging
 from typing import Any
 
 from aiogram import Bot, F, Router
+from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import CommandStart
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -129,6 +130,92 @@ async def handle_start(message: Message, session: AsyncSession, user: User | Non
                 price_fmt = PaymentService.format_service_price(service.price)
                 card_text = format_service_details_text(title, desc, price_fmt, lang)
                 await message.answer(card_text, reply_markup=payment_methods_kb(service.id, lang))
+
+
+@router.callback_query(F.data == "check_mandatory_sub")
+async def handle_check_mandatory_sub(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    bot: Bot,
+    user: User | None = None,
+) -> None:
+    """Handle checking mandatory channel and group subscription."""
+    if not callback.from_user:
+        return
+
+    from app.services.subscription_service import SubscriptionService
+
+    is_subscribed, unsubscribed = await SubscriptionService.check_user_subscribed_all(
+        bot=bot,
+        user_id=callback.from_user.id,
+        session=session,
+        bypass_cache=True,
+    )
+
+    lang = user.language if user else (callback.from_user.language_code or "uz")
+    if lang not in ("uz", "ru"):
+        lang = "uz"
+
+    if not is_subscribed:
+        alert_text = (
+            "❌ Siz hali barcha kanal va guruhlarga a'zo bo'lmadingiz. Iltimos, barchasiga a'zo bo'lib qayta tekshiring!"
+            if lang == "uz"
+            else "❌ Вы еще не подписались на все каналы и группы. Пожалуйста, подпишитесь на все и повторите попытку!"
+        )
+        await callback.answer(alert_text, show_alert=True)
+        msg_text = SubscriptionService.build_subscription_message(unsubscribed, lang)
+        kb = SubscriptionService.build_subscription_keyboard(unsubscribed, lang)
+        if callback.message and isinstance(callback.message, Message):
+            try:
+                await callback.message.edit_text(msg_text, reply_markup=kb, disable_web_page_preview=True)
+            except TelegramAPIError as e:
+                logger.debug("Failed to edit subscription message: %s", e)
+        return
+
+    success_alert = (
+        "✅ Rahmat! Barcha kanallarga muvaffaqiyatli a'zo bo'ldingiz."
+        if lang == "uz"
+        else "✅ Спасибо! Вы успешно подписались на все каналы."
+    )
+    await callback.answer(success_alert, show_alert=False)
+
+    if callback.message and isinstance(callback.message, Message):
+        try:
+            await callback.message.delete()
+        except TelegramAPIError as e:
+            logger.debug("Failed to delete subscription prompt message: %s", e)
+
+        if user and user.phone_number:
+            is_lawyer = UserService.is_lawyer(user)
+            balance_line = (
+                (
+                    "🎁 Balansingiz: <b>Cheksiz (Huquqshunos) ♾️</b>\n\n"
+                    if lang == "uz"
+                    else "🎁 Баланс: <b>Неограничен (Юрист) ♾️</b>\n\n"
+                )
+                if is_lawyer
+                else (
+                    f"🎁 Balansingiz: <b>{user.free_questions_left} ta</b> bepul savol.\n\n"
+                    if lang == "uz"
+                    else f"🎁 Баланс: <b>{user.free_questions_left}</b> бесплатных вопроса.\n\n"
+                )
+            )
+            welcome = (
+                f"Assalomu alaykum, <b>{user.full_name or 'hurmatli mijoz'}</b>!\n"
+                f"{balance_line}"
+                "Savolingizni yozing yoki menyudan kerakli bo'limni tanlang:"
+                if lang == "uz"
+                else f"Здравствуйте, <b>{user.full_name or 'уважаемый клиент'}</b>!\n"
+                f"{balance_line}"
+                "Напишите вопрос или выберите нужный раздел:"
+            )
+            await callback.message.answer(welcome, reply_markup=main_menu_kb(lang))
+        else:
+            greeting = (
+                "Assalomu alaykum! Muloqot tilini tanlang:\n\n"
+                "Здравствуйте! Выберите язык общения:"
+            )
+            await callback.message.answer(greeting, reply_markup=language_selection_kb())
 
 
 @router.callback_query(F.data.startswith("set_lang:"))
