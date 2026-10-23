@@ -378,14 +378,34 @@ async def process_aggregated_inquiry(
         # Check personal identity inquiry
         from app.bot.handlers.business.messages import (
             is_general_services_inquiry,
+            is_name_inquiry,
             is_personal_identity_inquiry,
         )
 
+        # Check if user is asking for the lawyer's name / identity
+        if is_name_inquiry(combined_text):
+            low = combined_text.lower()
+            if any(en_w in low for en_w in ["what is your name", "what's your name", "who are you", "your name"]):
+                name_reply = "My name is Iqboljon. I am a professional lawyer in Uzbekistan. If you have any legal questions, please describe them in detail."
+            elif lang == "ru" or any(ru_w in low for ru_w in ["как вас зовут", "как тебя зовут", "ваше имя", "кто вы"]):
+                name_reply = "Меня зовут Икболжон. Я профессиональный практикующий юрист. Если у вас есть правовые вопросы, подробно опишите вашу ситуацию."
+            else:
+                name_reply = "Mening ismim — Iqboljon. O'zbekiston Respublikasi qonunchiligi bo'yicha professional yuristman. Agar huquqiy masalada savollaringiz bo'lsa, bemalol yozib qoldirishingiz mumkin."
+            await last_message.answer(name_reply)
+            await ChatService.log_message(
+                session=session,
+                user_id=fresh_user.id,
+                telegram_id=fresh_user.telegram_id,
+                sender_type="bot",
+                text=name_reply,
+            )
+            return
+
         if is_personal_identity_inquiry(combined_text):
             low = combined_text.lower()
-            if any(en_w in low for en_w in ["how old", "who are you", "who are u", "what is your", "your age", "about you"]):
+            if any(en_w in low for en_w in ["how old", "what is your age", "your age", "about you"]):
                 personal_reply = "Unfortunately, I cannot answer personal questions. If you have any legal questions or issues, please describe them in detail."
-            elif lang == "ru" or any(ru_w in low for ru_w in ["кто вы", "сколько вам лет", "сколько тебе лет", "о себе"]):
+            elif lang == "ru" or any(ru_w in low for ru_w in ["сколько вам лет", "сколько тебе лет", "о себе"]):
                 personal_reply = "К сожалению, я не могу отвечать на личные вопросы. Если у вас есть правовые вопросы, подробно опишите вашу ситуацию."
             else:
                 personal_reply = "Afsusku shaxsiy savollaringizga javob bera olmayman. Agar huquqiuy masalada savollaringiz bo'lsa batafsil yozib qoldiring"

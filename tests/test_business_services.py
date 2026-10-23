@@ -519,25 +519,36 @@ def test_consultation_intent_triggers_catalog():
 
 
 def test_personal_identity_inquiry_detection_and_prompts():
-    from app.bot.handlers.business.messages import is_personal_identity_inquiry
+    from app.bot.handlers.business.messages import is_name_inquiry, is_personal_identity_inquiry
     from app.services.ai.prompts import PromptManager
 
-    # 1. Detection of personal questions
-    assert is_personal_identity_inquiry("kimsiz") is True
-    assert is_personal_identity_inquiry("kimsan") is True
-    assert is_personal_identity_inquiry("kim bu") is True
+    # 1. Detection of name inquiries (bot should state its name Iqboljon)
+    assert is_name_inquiry("Ismingiz nima?") is True
+    assert is_name_inquiry("Isming nima") is True
+    assert is_name_inquiry("Ismiz nima?") is True
+    assert is_name_inquiry("kimsiz") is True
+    assert is_name_inquiry("kimsan") is True
+    assert is_name_inquiry("kim bu") is True
+    assert is_name_inquiry("кто вы?") is True
+    assert is_name_inquiry("как вас зовут?") is True
+    assert is_name_inquiry("who are you") is True
+    assert is_name_inquiry("what is your name?") is True
+
+    # Name inquiries must NOT be classified as private personal inquiries (so bot doesn't refuse its name)
+    assert is_personal_identity_inquiry("Ismingiz nima?") is False
+    assert is_personal_identity_inquiry("kimsiz") is False
+
+    # 2. Detection of private personal questions (age, marriage, address, etc. - bot must refuse)
     assert is_personal_identity_inquiry("o'zingiz haqingizda gapiring") is True
     assert is_personal_identity_inquiry("yoshingiz nechida?") is True
     assert is_personal_identity_inquiry("Necha yoshsiz") is True
     assert is_personal_identity_inquiry("Nechanchi yilsiz") is True
     assert is_personal_identity_inquiry("how old are you") is True
     assert is_personal_identity_inquiry("how old are u") is True
-    assert is_personal_identity_inquiry("who are you") is True
     assert is_personal_identity_inquiry("Nimaga yoshing nechchida degan savolimga yuridik xizmatlar narxlarini tashlayapsam") is True
     assert is_personal_identity_inquiry("qayerdansiz") is True
     assert is_personal_identity_inquiry("uylanganmisiz?") is True
     assert is_personal_identity_inquiry("shaxsiy ma'lumotlaringizni bering") is True
-    assert is_personal_identity_inquiry("кто вы?") is True
     assert is_personal_identity_inquiry("расскажите о себе") is True
     assert is_personal_identity_inquiry("сколько вам лет") is True
 

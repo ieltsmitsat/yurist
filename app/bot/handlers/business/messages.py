@@ -45,8 +45,75 @@ def extract_phone(text: str) -> str | None:
     return raw
 
 
+def is_name_inquiry(text: str) -> bool:
+    """Check if the user is asking for the lawyer's name or who they are."""
+    q = text.lower().strip()
+    clean_no_punct = re.sub(r"[^\w\s]", " ", q)
+    words = clean_no_punct.split()
+
+    if not words:
+        return False
+
+    name_patterns = [
+        # Uzbek
+        "ismingiz nima",
+        "isming nima",
+        "ismiz nima",
+        "isming nma",
+        "ismingiz kim",
+        "isming kim",
+        "ismingiz",
+        "isming",
+        "ismiz",
+        "sizni kim deb",
+        "kim deb chaqir",
+        "otangizning ismi",
+        "sharifingiz",
+        "kimsiz",
+        "kimsan",
+        "kim bu",
+        "kim siz",
+        "kim san",
+        "kim u",
+        # Russian
+        "как вас зовут",
+        "как тебя зовут",
+        "ваше имя",
+        "твое имя",
+        "как к вам обращаться",
+        "кто вы",
+        "кто ты",
+        "кто это",
+        # English
+        "what is your name",
+        "what's your name",
+        "whats your name",
+        "who are you",
+        "who are u",
+        "who r u",
+        "your name",
+        "who is this",
+    ]
+
+    if any(p in q for p in name_patterns):
+        return True
+
+    if len(words) <= 3:
+        if any(w in words for w in ["ismingiz", "isming", "ismiz"]):
+            return True
+        if any(w in words for w in ["kimsiz", "kimsan"]):
+            return True
+        if "кто" in words and any(w in words for w in ["вы", "ты", "это"]):
+            return True
+
+    return False
+
+
 def is_personal_identity_inquiry(text: str) -> bool:
-    """Check if the user is asking about the lawyer's personal identity, age, background, or personal life."""
+    """Check if the user is asking about the lawyer's personal private life (age, background, family, residence)."""
+    if is_name_inquiry(text):
+        return False
+
     q = text.lower().strip()
     clean_no_punct = re.sub(r"[^\w\s]", " ", q)
     words = clean_no_punct.split()
@@ -55,22 +122,7 @@ def is_personal_identity_inquiry(text: str) -> bool:
         return False
 
     direct_patterns = [
-        # Identity / Name
-        "kimsiz",
-        "kimsan",
-        "kim bu",
-        "kim siz",
-        "kim san",
-        "kim u",
-        "ismingiz nima",
-        "ismingiz",
-        "isming nima",
-        "isming",
-        "ismiz",
-        "familiyangiz",
-        "familiya",
-        "otangiz",
-        "sharifingiz",
+        # Personal Background & Bio
         "o'zingiz haqingizda",
         "ozingiz haqingizda",
         "o'zingiz haqingizda gapiring",
@@ -145,13 +197,6 @@ def is_personal_identity_inquiry(text: str) -> bool:
         "shaxsiy savol berdim",
         "shaxsiy savolimga",
         # Russian
-        "кто вы",
-        "кто ты",
-        "кто это",
-        "как вас зовут",
-        "как тебя зовут",
-        "ваше имя",
-        "твое имя",
         "расскажи о себе",
         "расскажите о себе",
         "биография",
@@ -192,12 +237,6 @@ def is_personal_identity_inquiry(text: str) -> bool:
         "when were you born",
         "birth date",
         "birth year",
-        "who are you",
-        "who are u",
-        "who r u",
-        "who is this",
-        "what is your name",
-        "what's your name",
         "tell me about yourself",
         "about yourself",
         "where are you from",
@@ -215,24 +254,12 @@ def is_personal_identity_inquiry(text: str) -> bool:
         return True
 
     # 2. Short questions with "yil" (birth year), e.g. "nechi yilsiz", "yilingiz?"
-    if any(w in words for w in ["yilsiz", "yilsan"]) and len(words) <= 6:
-        return True
-
-    # 3. Short question about who the bot/person is
-    if len(words) <= 4:
-        if any(w in words for w in ["kimsiz", "kimsan"]) or ("kim" in words and any(w in words for w in ["bu", "siz", "san", "u"])):
-            return True
-        if "кто" in words and any(w in words for w in ["вы", "ты", "это"]):
-            return True
-        if "who" in words and any(w in words for w in ["you", "u", "this"]):
-            return True
-
-    return False
+    return bool(any(w in words for w in ["yilsiz", "yilsan"]) and len(words) <= 6)
 
 
 def is_general_services_inquiry(text: str) -> bool:
     """Check if the user is asking about general services catalog, pricing, or wants consultation."""
-    if is_personal_identity_inquiry(text):
+    if is_name_inquiry(text) or is_personal_identity_inquiry(text):
         return False
 
     q = text.lower().strip()
@@ -941,12 +968,32 @@ async def handle_business_message(
             )
             return
 
-    # 2.7. Check if user is asking personal questions about the lawyer's identity/personal life
+    # 2.65. Check if user is asking for the lawyer's name / identity
+    if is_name_inquiry(question_text):
+        low = question_text.lower()
+        if any(en_w in low for en_w in ["what is your name", "what's your name", "who are you", "your name"]):
+            name_reply = "My name is Iqboljon. I am a professional lawyer in Uzbekistan. If you have any legal questions, please describe them in detail."
+        elif client_user.language == "ru" or any(ru_w in low for ru_w in ["как вас зовут", "как тебя зовут", "ваше имя", "кто вы"]):
+            name_reply = "Меня зовут Икболжон. Я профессиональный практикующий юрист. Если у вас есть правовые вопросы, подробно опишите вашу ситуацию."
+        else:
+            name_reply = "Mening ismim — Iqboljon. O'zbekiston Respublikasi qonunchiligi bo'yicha professional yuristman. Agar huquqiy masalada savollaringiz bo'lsa, bemalol yozib qoldirishingiz mumkin."
+        await message.answer(text=name_reply)
+        await ChatService.log_message(
+            session=session,
+            user_id=client_user.id,
+            telegram_id=bot.id,
+            sender_type="bot",
+            text=name_reply,
+            is_business=True,
+        )
+        return
+
+    # 2.7. Check if user is asking personal questions about the lawyer's personal life (age, family, etc.)
     if is_personal_identity_inquiry(question_text):
         low = question_text.lower()
-        if any(en_w in low for en_w in ["how old", "who are you", "who are u", "what is your", "your age", "about you"]):
+        if any(en_w in low for en_w in ["how old", "what is your age", "your age", "about you"]):
             personal_reply = "Unfortunately, I cannot answer personal questions. If you have any legal questions or issues, please describe them in detail."
-        elif client_user.language == "ru" or any(ru_w in low for ru_w in ["кто вы", "сколько вам лет", "сколько тебе лет", "о себе"]):
+        elif client_user.language == "ru" or any(ru_w in low for ru_w in ["сколько вам лет", "сколько тебе лет", "о себе"]):
             personal_reply = "К сожалению, я не могу отвечать на личные вопросы. Если у вас есть правовые вопросы, подробно опишите вашу ситуацию."
         else:
             personal_reply = "Afsusku shaxsiy savollaringizga javob bera olmayman. Agar huquqiuy masalada savollaringiz bo'lsa batafsil yozib qoldiring"
