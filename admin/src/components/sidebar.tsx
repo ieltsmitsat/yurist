@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { removeToken } from "@/lib/api";
 
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: "📊" },
@@ -21,6 +22,13 @@ const BOTTOM_ITEMS = [
 
 export default function Sidebar({ onClose }: { onClose?: () => void }) {
   const pathname = usePathname();
+  const router = useRouter();
+
+  const handleLogout = () => {
+    removeToken();
+    if (onClose) onClose();
+    router.replace("/login");
+  };
 
   return (
     <aside className="w-64 bg-white border-r border-slate-200 flex flex-col shrink-0 h-full">
@@ -68,7 +76,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
       </nav>
 
       <div className="px-3 pb-3 space-y-0.5 shrink-0">
-        <div className="border-t border-slate-200 pt-3">
+        <div className="border-t border-slate-200 pt-3 space-y-1">
           {BOTTOM_ITEMS.map((item) => {
             const isActive = pathname === item.href;
             return (
@@ -87,6 +95,13 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
               </Link>
             );
           })}
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 hover:text-red-700 transition-all text-left cursor-pointer"
+          >
+            <span className="text-base w-5 text-center">🚪</span>
+            Chiqish
+          </button>
         </div>
       </div>
 

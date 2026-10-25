@@ -33,12 +33,19 @@ class Settings(BaseSettings):
     ADMIN_GROUP_ID: int | None = Field(default=None)
     LAWYER_TELEGRAM_ID: int | None = Field(default=None)
     ADMIN_TELEGRAM_IDS: str = Field(default="")  # Comma separated IDs
+    ADMIN_API_KEY: str = Field(default="")  # Required in production for /api/v1 admin endpoints
+
+    # Admin Web Authentication
+    ADMIN_USERNAME: str = Field(default="admin")
+    ADMIN_PASSWORD: str = Field(default="admin123")
+    ADMIN_SESSION_SECRET: str = Field(default="yurist_super_secure_session_secret_key_2026")
+    ADMIN_TOKEN_EXPIRE_DAYS: int = 7
 
     # Server & Webhook
     HOST: str = "0.0.0.0"
     PORT: int = 8000
     WEBHOOK_URL: str | None = None
-    WEBHOOK_SECRET: str = "yurist_webhook_secret_key"
+    WEBHOOK_SECRET: str = Field(default="")
 
     # Database & Redis
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/yurist_db"

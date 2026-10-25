@@ -1,10 +1,49 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import Sidebar from "./sidebar";
+import { getSavedToken } from "@/lib/api";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const pathname = usePathname();
+  const router = useRouter();
+
+  const isLoginPage = pathname === "/login";
+
+  useEffect(() => {
+    if (isLoginPage) {
+      setIsAuthenticated(true);
+      return;
+    }
+
+    const token = getSavedToken();
+    if (!token) {
+      setIsAuthenticated(false);
+      router.replace("/login");
+    } else {
+      setIsAuthenticated(true);
+    }
+  }, [pathname, isLoginPage, router]);
+
+  // If this is the login page, render children directly without dashboard chrome
+  if (isLoginPage) {
+    return <>{children}</>;
+  }
+
+  // Initial loading state while verifying local auth
+  if (isAuthenticated === null || !isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-900">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+          <span className="text-sm font-medium text-slate-400">Avtorizatsiya tekshirilmoqda...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">

@@ -1,5 +1,6 @@
 """Telegram Bot Webhook endpoint with secret token validation."""
 
+import hmac
 import logging
 from typing import Any
 
@@ -20,12 +21,24 @@ async def telegram_webhook(
     x_telegram_bot_api_secret_token: str | None = Header(default=None),
 ) -> dict[str, bool]:
     """Process incoming Telegram updates via Webhook."""
-    # Validate secret token if configured
-    if settings.WEBHOOK_SECRET and x_telegram_bot_api_secret_token != settings.WEBHOOK_SECRET:
-        logger.warning("Unauthorized webhook request with invalid secret token")
+    expected_secret = settings.WEBHOOK_SECRET
+    if not expected_secret and settings.ENVIRONMENT.lower() == "development":
+        expected_secret = "dev_webhook_secret_for_tests"
+
+    if expected_secret:
+        if not x_telegram_bot_api_secret_token or not hmac.compare_digest(
+            x_telegram_bot_api_secret_token, expected_secret
+        ):
+            logger.warning("Unauthorized webhook request with invalid secret token")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Invalid secret token",
+            )
+    elif settings.ENVIRONMENT.lower() == "production":
+        logger.error("Rejecting webhook update: WEBHOOK_SECRET is not configured in production")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Invalid secret token",
+            detail="Webhook secret token is not configured",
         )
 
     try:

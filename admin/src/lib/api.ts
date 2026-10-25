@@ -2,14 +2,55 @@ const API_BASE =
   process.env.NEXT_PUBLIC_API_URL ||
   (typeof window !== "undefined" ? "/api/v1" : "http://localhost:8000/api/v1");
 
+const ADMIN_KEY = process.env.NEXT_PUBLIC_ADMIN_API_KEY || "";
+
+export function getSavedToken(): string {
+  if (typeof window !== "undefined") {
+    return localStorage.getItem("yurist_admin_token") || "";
+  }
+  return "";
+}
+
+export function saveToken(token: string): void {
+  if (typeof window !== "undefined") {
+    localStorage.setItem("yurist_admin_token", token);
+    document.cookie = `yurist_admin_token=${token}; path=/; max-age=604800; SameSite=Lax`;
+  }
+}
+
+export function removeToken(): void {
+  if (typeof window !== "undefined") {
+    localStorage.removeItem("yurist_admin_token");
+    document.cookie = "yurist_admin_token=; path=/; max-age=0; SameSite=Lax";
+  }
+}
+
 export async function fetchApi<T>(
   endpoint: string,
   options?: RequestInit
 ): Promise<T> {
+  const token = getSavedToken() || ADMIN_KEY;
+  const authHeaders: Record<string, string> = token
+    ? {
+        "X-Admin-Key": token,
+        Authorization: `Bearer ${token}`,
+      }
+    : {};
+
   const res = await fetch(`${API_BASE}${endpoint}`, {
-    headers: { "Content-Type": "application/json", ...options?.headers },
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders,
+      ...options?.headers,
+    },
     ...options,
   });
+
+  if (res.status === 401 && typeof window !== "undefined" && window.location.pathname !== "/login") {
+    removeToken();
+    window.location.href = "/login";
+  }
+
   if (!res.ok) {
     let errorDetail = "";
     try {
@@ -22,6 +63,22 @@ export async function fetchApi<T>(
   }
   return res.json();
 }
+
+export interface LoginResponse {
+  ok: boolean;
+  access_token: string;
+  token_type: string;
+  username: string;
+}
+
+export const loginAdmin = (username: string, password: string) =>
+  fetchApi<LoginResponse>("/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username, password }),
+  });
+
+export const checkAuth = () =>
+  fetchApi<{ ok: boolean; username: string }>("/auth/me");
 
 // Dashboard
 export const getDashboardStats = () => fetchApi<DashboardStats>("/dashboard/stats");

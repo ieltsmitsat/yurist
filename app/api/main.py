@@ -5,9 +5,10 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.v1.auth import router as auth_router
 from app.api.v1.chats import router as chats_router
 from app.api.v1.crm import router as crm_router
 from app.api.v1.dashboard import router as dashboard_router
@@ -22,6 +23,7 @@ from app.bot.bot_instance import bot, dp
 from app.bot.main import setup_bot_dispatcher
 from app.core.config import settings
 from app.core.redis import close_redis_client
+from app.core.security import verify_admin_access
 from app.db.session import AsyncSessionLocal
 from app.services.scheduler_service import RetargetingSchedulerService
 
@@ -104,22 +106,25 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
-        allow_credentials=True,
+        allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
     )
 
+    admin_auth = [Depends(verify_admin_access)]
+
     # Include routers
     app.include_router(health_router, prefix="/api/v1")
+    app.include_router(auth_router, prefix="/api/v1")
     app.include_router(webhook_router, prefix="/api/v1")
-    app.include_router(crm_router, prefix="/api/v1")
-    app.include_router(dashboard_router, prefix="/api/v1")
-    app.include_router(services_router, prefix="/api/v1")
-    app.include_router(helplines_router, prefix="/api/v1")
-    app.include_router(channels_router, prefix="/api/v1")
-    app.include_router(transactions_router, prefix="/api/v1")
-    app.include_router(chats_router, prefix="/api/v1")
-    app.include_router(settings_router, prefix="/api/v1")
+    app.include_router(crm_router, prefix="/api/v1", dependencies=admin_auth)
+    app.include_router(dashboard_router, prefix="/api/v1", dependencies=admin_auth)
+    app.include_router(services_router, prefix="/api/v1", dependencies=admin_auth)
+    app.include_router(helplines_router, prefix="/api/v1", dependencies=admin_auth)
+    app.include_router(channels_router, prefix="/api/v1", dependencies=admin_auth)
+    app.include_router(transactions_router, prefix="/api/v1", dependencies=admin_auth)
+    app.include_router(chats_router, prefix="/api/v1", dependencies=admin_auth)
+    app.include_router(settings_router, prefix="/api/v1", dependencies=admin_auth)
 
     return app
 
