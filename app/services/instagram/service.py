@@ -14,6 +14,7 @@ from app.services.instagram.human_handoff import HumanAgentHandoffSkill
 from app.services.instagram.intake_triage import LegalIntakeTriageSkill, RiskLevel
 from app.services.instagram.lead_conversion import LeadConversionSkill
 from app.services.instagram.lexuz_rag import LexUzRAGSkill
+from app.services.instagram.persistence import InstagramPersistenceService
 from app.services.instagram.persona import UndetectablePersonaSkill
 from app.services.instagram.policy_enforcer import MetaPolicyEnforcerSkill
 
@@ -124,21 +125,75 @@ class InstagramAutomationService:
         if not user_text:
             return []
 
+        # Database Persistence: Get or create Instagram user and log inbound message
+        db_user = None
+        if db_session is not None:
+            try:
+                db_user = await InstagramPersistenceService.get_or_create_user(
+                    session=db_session,
+                    instagram_id=sender_id,
+                )
+                await InstagramPersistenceService.record_inbound_message(
+                    session=db_session,
+                    user=db_user,
+                    text=user_text,
+                    message_type="voice" if (not message_data.get("text") and attachments) else "text",
+                    instagram_message_id=str(message_data.get("mid") or ""),
+                )
+            except Exception as e:  # noqa: BLE001
+                logger.error("DB persistence error on inbound message: %s", e)
+
         # Skill 2: Check for phone number in user text
         extracted_phone = self.contact_skill.extract_uz_phone(user_text)
-        if extracted_phone and redis_client is not None:
-            await redis_client.set(f"ig_user_phone:{sender_id}", extracted_phone, ex=86400 * 30)
+        if extracted_phone:
+            if redis_client is not None:
+                await redis_client.set(f"ig_user_phone:{sender_id}", extracted_phone, ex=86400 * 30)
+            if db_session is not None and db_user is not None:
+                try:
+                    db_user = await InstagramPersistenceService.update_user_contact(
+                        session=db_session,
+                        user=db_user,
+                        phone_number=extracted_phone,
+                    )
+                except Exception as e:  # noqa: BLE001
+                    logger.error("DB persistence error on phone update: %s", e)
 
         # Skill 3: Intercept personal non-legal questions
         if self.persona_skill.is_personal_question(user_text):
             response_text = self.persona_skill.get_personal_question_response(user_text)
-            return await self._dispatch_response_chunks(sender_id, response_text, last_inbound, redis_client, start_time)
+            chunks = await self._dispatch_response_chunks(sender_id, response_text, last_inbound, redis_client, start_time)
+            if db_session is not None and db_user is not None:
+                try:
+                    for chunk in chunks:
+                        await InstagramPersistenceService.record_outbound_message(
+                            session=db_session,
+                            user=db_user,
+                            text=chunk,
+                            sender_type="bot",
+                        )
+                    await db_session.commit()
+                except Exception as e:  # noqa: BLE001
+                    logger.error("DB persistence error on personal question: %s", e)
+            return chunks
 
         # Skill 9: Check remaining free questions
         remaining = await self.conversion_skill.get_remaining_free_questions(sender_id, redis_client)
         if remaining <= 0:
             upsell_msg = self.conversion_skill.get_exhausted_limit_message()
-            return await self._dispatch_response_chunks(sender_id, upsell_msg, last_inbound, redis_client, start_time)
+            chunks = await self._dispatch_response_chunks(sender_id, upsell_msg, last_inbound, redis_client, start_time)
+            if db_session is not None and db_user is not None:
+                try:
+                    for chunk in chunks:
+                        await InstagramPersistenceService.record_outbound_message(
+                            session=db_session,
+                            user=db_user,
+                            text=chunk,
+                            sender_type="bot",
+                        )
+                    await db_session.commit()
+                except Exception as e:  # noqa: BLE001
+                    logger.error("DB persistence error on exhausted limit: %s", e)
+            return chunks
 
         # Deduct 1 free question
         await self.conversion_skill.decrement_free_question(sender_id, redis_client)
@@ -151,7 +206,29 @@ class InstagramAutomationService:
         # If Critical SOS: Return immediate emergency protocol
         if risk_level == RiskLevel.CRITICAL:
             response_text = self.triage_skill.SOS_INSTRUCTIONS
-            return await self._dispatch_response_chunks(sender_id, response_text, last_inbound, redis_client, start_time)
+            chunks = await self._dispatch_response_chunks(sender_id, response_text, last_inbound, redis_client, start_time)
+            if db_session is not None and db_user is not None:
+                try:
+                    await InstagramPersistenceService.record_inquiry(
+                        session=db_session,
+                        user=db_user,
+                        question_text=user_text,
+                        answer_text=response_text,
+                        category=_category.value,
+                        risk_level=risk_level.value,
+                        risk_score=_risk_score,
+                    )
+                    for chunk in chunks:
+                        await InstagramPersistenceService.record_outbound_message(
+                            session=db_session,
+                            user=db_user,
+                            text=chunk,
+                            sender_type="bot",
+                        )
+                    await db_session.commit()
+                except Exception as e:  # noqa: BLE001
+                    logger.error("DB persistence error on SOS dispatch: %s", e)
+            return chunks
 
         # Skill 5: Lex.uz RAG retrieval
         articles = await self.rag_skill.retrieve_top_articles(user_text, limit=2, db_session=db_session)
@@ -196,7 +273,32 @@ class InstagramAutomationService:
         if not cached_phone and not extracted_phone:
             clean_text += f"\n\n{self.contact_skill.CONTACT_REQUEST_PROMPT}"
 
-        return await self._dispatch_response_chunks(sender_id, clean_text, last_inbound, redis_client, start_time)
+        chunks = await self._dispatch_response_chunks(sender_id, clean_text, last_inbound, redis_client, start_time)
+
+        # Database Persistence: Record inquiry and outbound messages
+        if db_session is not None and db_user is not None:
+            try:
+                await InstagramPersistenceService.record_inquiry(
+                    session=db_session,
+                    user=db_user,
+                    question_text=user_text,
+                    answer_text=clean_text,
+                    category=_category.value,
+                    risk_level=risk_level.value,
+                    risk_score=_risk_score,
+                )
+                for chunk in chunks:
+                    await InstagramPersistenceService.record_outbound_message(
+                        session=db_session,
+                        user=db_user,
+                        text=chunk,
+                        sender_type="bot",
+                    )
+                await db_session.commit()
+            except Exception as e:  # noqa: BLE001
+                logger.error("DB persistence error on inquiry/outbound messages: %s", e)
+
+        return chunks
 
     async def _dispatch_response_chunks(
         self,

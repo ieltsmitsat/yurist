@@ -51,13 +51,24 @@ async def init_database() -> None:
             except Exception as exc:  # noqa: BLE001
                 logger.debug("Column %s check or migration note: %s", col, exc)
 
-        try:
-            if "postgres" in settings.DATABASE_URL:
-                await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS business_connection_id VARCHAR(255)"))
-            else:
-                await conn.execute(text("ALTER TABLE users ADD COLUMN business_connection_id VARCHAR(255)"))
-        except Exception as exc:  # noqa: BLE001
-            logger.debug("Column business_connection_id check note: %s", exc)
+        # Non-destructive migrations for Instagram omnichannel support
+        extra_columns = [
+            ("users", "instagram_id", "VARCHAR(100)"),
+            ("users", "platform", "VARCHAR(50) DEFAULT 'telegram'"),
+            ("users", "instagram_username", "VARCHAR(255)"),
+            ("inquiries", "channel", "VARCHAR(50) DEFAULT 'telegram'"),
+            ("inquiries", "detected_category", "VARCHAR(100)"),
+            ("chat_messages", "channel", "VARCHAR(50) DEFAULT 'telegram'"),
+            ("chat_messages", "instagram_message_id", "VARCHAR(255)"),
+        ]
+        for tbl, col, col_def in extra_columns:
+            try:
+                if "postgres" in settings.DATABASE_URL:
+                    await conn.execute(text(f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS {col} {col_def}"))
+                else:
+                    await conn.execute(text(f"ALTER TABLE {tbl} ADD COLUMN {col} {col_def}"))
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("Column %s.%s migration note: %s", tbl, col, exc)
 
         try:
             if "postgres" in settings.DATABASE_URL:

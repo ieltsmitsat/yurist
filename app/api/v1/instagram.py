@@ -5,8 +5,10 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import PlainTextResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.redis import get_redis_client
+from app.db.session import get_db_session
 from app.services.instagram.service import InstagramAutomationService
 
 logger = logging.getLogger(__name__)
@@ -32,6 +34,7 @@ async def verify_instagram_webhook(
 async def handle_instagram_webhook_events(
     request: Request,
     redis_client: Any = Depends(get_redis_client),  # noqa: B008
+    db_session: AsyncSession = Depends(get_db_session),  # noqa: B008
 ) -> dict[str, Any]:
     """Receive and process incoming Instagram comments and Direct Messages."""
     try:
@@ -65,6 +68,7 @@ async def handle_instagram_webhook_events(
                     sender_id=sender_id,
                     message_data=message_data,
                     redis_client=redis_client,
+                    db_session=db_session,
                 )
 
     return {"status": "ok"}

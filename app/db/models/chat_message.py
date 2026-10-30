@@ -18,6 +18,7 @@ class ChatMessage(Base, TimestampMixin):
         kw.setdefault("sender_type", "user")
         kw.setdefault("message_type", "text")
         kw.setdefault("is_business", False)
+        kw.setdefault("channel", "telegram")
         super().__init__(**kw)
 
     id: Mapped[int] = mapped_column(PK_BIGINT, primary_key=True, autoincrement=True)
@@ -25,6 +26,8 @@ class ChatMessage(Base, TimestampMixin):
         BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     telegram_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    channel: Mapped[str] = mapped_column(String(50), default="telegram", nullable=False)
+    instagram_message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # sender_type: "user", "bot", "lawyer"
     sender_type: Mapped[str] = mapped_column(String(20), default="user", nullable=False)

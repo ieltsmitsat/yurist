@@ -35,6 +35,7 @@ class Inquiry(Base, TimestampMixin):
 
     def __init__(self, **kw: Any) -> None:
         kw.setdefault("status", InquiryStatus.ANSWERED.value)
+        kw.setdefault("channel", "telegram")
         super().__init__(**kw)
 
     id: Mapped[int] = mapped_column(PK_BIGINT, primary_key=True, autoincrement=True)
@@ -42,6 +43,8 @@ class Inquiry(Base, TimestampMixin):
         BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
 
+    channel: Mapped[str] = mapped_column(String(50), default="telegram", nullable=False)
+    detected_category: Mapped[str | None] = mapped_column(String(100), nullable=True)
     question_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     stt_transcript: Mapped[str | None] = mapped_column(Text, nullable=True)
 
