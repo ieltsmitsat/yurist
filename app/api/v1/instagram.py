@@ -1,14 +1,17 @@
 """Instagram Meta Graph API Webhook endpoints."""
 
+import json
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query, Request, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.redis import get_redis_client
 from app.db.session import get_db_session
+from app.services.instagram.security import verify_meta_hub_signature
 from app.services.instagram.service import InstagramAutomationService
 
 logger = logging.getLogger(__name__)
@@ -33,12 +36,31 @@ async def verify_instagram_webhook(
 @router.post("/webhook")
 async def handle_instagram_webhook_events(
     request: Request,
+    x_hub_signature_256: str | None = Header(default=None, alias="X-Hub-Signature-256"),
     redis_client: Any = Depends(get_redis_client),  # noqa: B008
     db_session: AsyncSession = Depends(get_db_session),  # noqa: B008
 ) -> dict[str, Any]:
-    """Receive and process incoming Instagram comments and Direct Messages."""
+    """Receive and process incoming Instagram comments and Direct Messages with HMAC verification."""
+    raw_body = await request.body()
+
+    # Meta Webhook Security Signature Check (HMAC-SHA256)
+    app_secret = settings.INSTAGRAM_APP_SECRET
+    if app_secret:
+        if not verify_meta_hub_signature(raw_body, x_hub_signature_256, app_secret):
+            logger.warning("Rejected Instagram webhook with invalid X-Hub-Signature-256")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Invalid Meta X-Hub-Signature-256 signature",
+            )
+    elif settings.ENVIRONMENT.lower() == "production":
+        logger.error("Rejecting Instagram webhook: INSTAGRAM_APP_SECRET is not configured in production")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Instagram App Secret is not configured",
+        )
+
     try:
-        body: dict[str, Any] = await request.json()
+        body: dict[str, Any] = json.loads(raw_body.decode("utf-8"))
     except Exception as e:  # noqa: BLE001
         logger.warning("Invalid JSON in Instagram webhook: %s", e)
         return {"status": "ignored"}

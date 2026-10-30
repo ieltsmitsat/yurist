@@ -81,6 +81,7 @@ class Settings(BaseSettings):
     # Instagram DM Automation
     INSTAGRAM_PAGE_ID: str = Field(default="")
     INSTAGRAM_ACCESS_TOKEN: str = Field(default="")
+    INSTAGRAM_APP_SECRET: str = Field(default="")
     INSTAGRAM_VERIFY_TOKEN: str = Field(default="yurist_instagram_verify_token")
     INSTAGRAM_GRAPH_API_VERSION: str = "v21.0"
     INSTAGRAM_RATE_LIMIT_PER_HOUR: int = 750
