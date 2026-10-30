@@ -7,6 +7,7 @@ from aiogram import Bot
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.services.access_service import AccessService
 
 if TYPE_CHECKING:
@@ -190,5 +191,99 @@ class GroupNotificationService:
                     thread_id,
                     e,
                 )
+
+        return sent_count
+
+    @classmethod
+    async def notify_instagram_lead(
+        cls,
+        bot: Bot,
+        session: AsyncSession,
+        user: "User",
+        message_text: str = "",
+    ) -> int:
+        """Send new Instagram lead notification to Telegram forum topics or admin group.
+
+        Triggered when an Instagram lead provides their phone number.
+        """
+        destinations = await AccessService.get_topic_destinations(session, topic_type="contact")
+        if not destinations:
+            destinations = await AccessService.get_topic_destinations(session, topic_type="lead")
+
+        snippet = message_text.strip()
+        if len(snippet) > 500:
+            snippet = snippet[:497] + "..."
+
+        ig_handle = f"@{user.instagram_username}" if user.instagram_username else (user.instagram_id or "Noma'lum")
+        text = (
+            "📸 <b>[INSTAGRAM DIRECT] YANGI LID KONTAKTI!</b>\n\n"
+            f"👤 <b>Instagram:</b> {ig_handle}\n"
+            f"📱 <b>Telefon raqami:</b> <code>{user.phone_number or 'Kiritilmagan'}</code>\n"
+            f"🆔 <b>Instagram ID:</b> <code>{user.instagram_id}</code>\n"
+        )
+        if snippet:
+            text += f"\n💬 <b>Murojaat mazmuni:</b>\n<i>{snippet}</i>\n"
+
+        text += "\n👉 <i>Advokat yoki operator zudlik bilan ushbu raqamga bog'lanishi tavsiya etiladi.</i>"
+
+        sent_count = 0
+        if destinations:
+            for group_id, thread_id in destinations:
+                try:
+                    await bot.send_message(chat_id=group_id, message_thread_id=thread_id, text=text)
+                    sent_count += 1
+                except Exception as e:  # noqa: BLE001
+                    logger.warning("Failed to deliver Instagram lead to topic %s in %s: %s", thread_id, group_id, e)
+        elif settings.ADMIN_GROUP_ID:
+            try:
+                await bot.send_message(chat_id=settings.ADMIN_GROUP_ID, text=text)
+                sent_count += 1
+            except Exception as e:  # noqa: BLE001
+                logger.warning("Failed to deliver Instagram lead to admin group %s: %s", settings.ADMIN_GROUP_ID, e)
+
+        return sent_count
+
+    @classmethod
+    async def notify_instagram_sos(
+        cls,
+        bot: Bot,
+        session: AsyncSession,
+        user: "User",
+        question: str,
+        risk_score: int,
+        risk_level: str = "critical",
+    ) -> int:
+        """Send immediate high-priority SOS alert for critical Instagram inquiries."""
+        destinations = await AccessService.get_topic_destinations(session, topic_type="lead")
+        snippet = question.strip()
+        if len(snippet) > 600:
+            snippet = snippet[:597] + "..."
+
+        ig_handle = f"@{user.instagram_username}" if user.instagram_username else (user.instagram_id or "Noma'lum")
+        alert_text = (
+            f"🚨 <b>[INSTAGRAM] SHOSHILINCH SOS OGOHLANTIRISH ({risk_level.upper()})!</b>\n\n"
+            f"👤 <b>Instagram:</b> {ig_handle}\n"
+            f"📱 <b>Telefon:</b> <code>{user.phone_number or 'Hali kiritilmagan'}</code>\n"
+            f"🔴 <b>Xavf darajasi:</b> {risk_score}/100 ({risk_level.upper()})\n"
+            f"🆔 <b>Instagram ID:</b> <code>{user.instagram_id}</code>\n\n"
+            f"💬 <b>Vaziyat tavsifi:</b>\n<i>{snippet}</i>\n\n"
+            "⚡ <b>Harakat:</b> Mijozga 30 soniyalik shoshilinch huquqiy yo'riqnoma yuborildi. "
+            "Advokat tezkor aralashuvi va Direct orqali bog'lanish zarur!"
+        )
+
+        sent_count = 0
+        if destinations:
+            for group_id, thread_id in destinations:
+                try:
+                    await bot.send_message(chat_id=group_id, message_thread_id=thread_id, text=alert_text)
+                    sent_count += 1
+                except Exception as e:  # noqa: BLE001
+                    logger.warning("Failed delivering Instagram SOS to topic %s in %s: %s", thread_id, group_id, e)
+        elif settings.ADMIN_GROUP_ID:
+            try:
+                await bot.send_message(chat_id=settings.ADMIN_GROUP_ID, text=alert_text)
+                sent_count += 1
+            except Exception as e:  # noqa: BLE001
+                logger.warning("Failed delivering Instagram SOS to admin group %s: %s", settings.ADMIN_GROUP_ID, e)
 
         return sent_count

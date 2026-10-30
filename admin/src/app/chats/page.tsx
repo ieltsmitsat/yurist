@@ -161,7 +161,18 @@ export default function ChatsPage() {
                 }`}
               >
                 <div className="flex justify-between items-start mb-1">
-                  <h3 className="font-medium text-slate-900 text-sm truncate">{d.full_name}</h3>
+                  <div className="flex items-center gap-1.5 truncate">
+                    <h3 className="font-medium text-slate-900 text-sm truncate">{d.full_name}</h3>
+                    {d.platform === "instagram" || d.channel === "instagram" || d.instagram_id ? (
+                      <span className="text-[9px] bg-gradient-to-r from-pink-500 to-rose-500 text-white px-1.5 py-0.2 rounded font-medium shrink-0">
+                        IG
+                      </span>
+                    ) : (
+                      <span className="text-[9px] bg-sky-100 text-sky-700 px-1.5 py-0.2 rounded font-medium shrink-0">
+                        TG
+                      </span>
+                    )}
+                  </div>
                   <span className="text-[10px] text-slate-400 whitespace-nowrap ml-2">
                     {d.last_time ? format(new Date(d.last_time), "HH:mm") : ""}
                   </span>
@@ -202,9 +213,23 @@ export default function ChatsPage() {
                 {selectedDialog?.full_name?.charAt(0) || "?"}
               </div>
               <div className="min-w-0">
-                <h3 className="font-semibold text-slate-900 truncate">{selectedDialog?.full_name}</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold text-slate-900 truncate">{selectedDialog?.full_name}</h3>
+                  {selectedDialog?.platform === "instagram" || selectedDialog?.channel === "instagram" || selectedDialog?.instagram_id ? (
+                    <span className="text-[10px] bg-pink-100 text-pink-700 font-medium px-2 py-0.5 rounded-full">
+                      Instagram Direct
+                    </span>
+                  ) : (
+                    <span className="text-[10px] bg-sky-100 text-sky-700 font-medium px-2 py-0.5 rounded-full">
+                      Telegram Bot
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs text-slate-500 truncate">
-                  TG: {selectedDialog?.telegram_id} • {selectedDialog?.phone_number || "Telefon yo'q"} • {selectedDialog?.lead_status}
+                  {selectedDialog?.platform === "instagram" || selectedDialog?.instagram_id
+                    ? `IG: @${selectedDialog?.instagram_username || selectedDialog?.instagram_id}`
+                    : `TG: ${selectedDialog?.telegram_id}`}{" "}
+                  • {selectedDialog?.phone_number || "Telefon yo'q"} • {selectedDialog?.lead_status}
                 </p>
               </div>
             </div>

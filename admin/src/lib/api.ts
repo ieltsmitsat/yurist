@@ -320,6 +320,10 @@ export interface Dialog {
   last_sender: string;
   last_time: string | null;
   total_messages: number;
+  platform?: "telegram" | "instagram" | "both" | string;
+  instagram_id?: string | null;
+  instagram_username?: string | null;
+  channel?: string | null;
 }
 
 export interface ChatMessageItem {
@@ -331,6 +335,7 @@ export interface ChatMessageItem {
   text: string;
   media_url?: string | null;
   created_at: string;
+  channel?: string | null;
 }
 
 export const getDialogs = () => fetchApi<Dialog[]>("/chats");

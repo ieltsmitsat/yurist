@@ -216,6 +216,10 @@ class ChatService:
                     "language": u.language,
                     "lead_status": u.lead_status,
                     "free_questions_left": u.free_questions_left,
+                    "platform": u.platform or "telegram",
+                    "instagram_id": u.instagram_id,
+                    "instagram_username": u.instagram_username,
+                    "channel": getattr(last_msg, "channel", None) or ("instagram" if u.platform == "instagram" else "telegram"),
                     "last_message": last_text or "Yozishma yo'q",
                     "last_sender": last_sender or "user",
                     "last_time": last_time or (u.created_at.isoformat() if u.created_at else None),
@@ -234,15 +238,47 @@ class ChatService:
         bot: Bot,
         user_id: int,
         text: str,
+        redis_client: Any | None = None,
     ) -> ChatMessage:
-        """Lawyer sends a message directly to the client via Telegram Bot from the admin panel."""
+        """Lawyer sends a direct reply to the client (via Instagram Direct or Telegram Bot) from admin dashboard."""
         stmt = select(User).where(User.id == user_id)
         res = await session.execute(stmt)
         user = res.scalar_one_or_none()
         if not user:
             raise ValueError(f"User with ID {user_id} not found")
 
-        # Send via Telegram bot
+        # 1. Instagram omnichannel reply
+        if (user.platform == "instagram" or (user.instagram_id and user.telegram_id < 0)) and user.instagram_id:
+            from app.services.instagram.service import InstagramAutomationService
+
+            ig_service = InstagramAutomationService()
+            await ig_service.send_manual_lawyer_reply(
+                sender_id=user.instagram_id,
+                text=text,
+                redis_client=redis_client,
+                db_session=session,
+            )
+            # Fetch latest persisted lawyer message
+            stmt_last = (
+                select(ChatMessage)
+                .where(ChatMessage.user_id == user.id)
+                .order_by(ChatMessage.created_at.desc())
+                .limit(1)
+            )
+            res_last = await session.execute(stmt_last)
+            latest_msg = res_last.scalar_one_or_none()
+            if latest_msg:
+                return latest_msg
+
+            return await cls.log_message(
+                session=session,
+                user_id=user.id,
+                telegram_id=user.telegram_id,
+                sender_type="lawyer",
+                text=text,
+            )
+
+        # 2. Telegram Bot reply
         tg_msg = await bot.send_message(chat_id=user.telegram_id, text=text)
 
         # Log as lawyer message

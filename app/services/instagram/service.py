@@ -6,7 +6,9 @@ from typing import Any
 
 import httpx
 
+from app.bot.bot_instance import bot
 from app.core.config import settings
+from app.services.group_notification_service import GroupNotificationService
 from app.services.instagram.audio_stt import MultimodalVoiceDMSkill
 from app.services.instagram.comment_to_dm import CommentToDMSkill
 from app.services.instagram.contact_capture import ContactCapture24hSkill
@@ -17,6 +19,7 @@ from app.services.instagram.lexuz_rag import LexUzRAGSkill
 from app.services.instagram.persistence import InstagramPersistenceService
 from app.services.instagram.persona import UndetectablePersonaSkill
 from app.services.instagram.policy_enforcer import MetaPolicyEnforcerSkill
+from app.services.instagram.triggers import StoryAndAdsTriggerSkill
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +38,7 @@ class InstagramAutomationService:
         handoff_skill: HumanAgentHandoffSkill | None = None,
         policy_skill: MetaPolicyEnforcerSkill | None = None,
         conversion_skill: LeadConversionSkill | None = None,
+        trigger_skill: StoryAndAdsTriggerSkill | None = None,
     ) -> None:
         self.comment_skill = comment_skill or CommentToDMSkill()
         self.contact_skill = contact_skill or ContactCapture24hSkill()
@@ -45,6 +49,7 @@ class InstagramAutomationService:
         self.handoff_skill = handoff_skill or HumanAgentHandoffSkill()
         self.policy_skill = policy_skill or MetaPolicyEnforcerSkill()
         self.conversion_skill = conversion_skill or LeadConversionSkill()
+        self.trigger_skill = trigger_skill or StoryAndAdsTriggerSkill()
 
     def verify_webhook(self, mode: str | None, token: str | None, challenge: str | None) -> str | None:
         """Verify Meta Webhook subscription token and return challenge string if valid."""
@@ -94,8 +99,9 @@ class InstagramAutomationService:
         message_data: dict[str, Any],
         redis_client: Any | None = None,
         db_session: Any | None = None,
+        event_data: dict[str, Any] | None = None,
     ) -> list[str]:
-        """Process an incoming Instagram Direct Message (text or voice)."""
+        """Process an incoming Instagram Direct Message (text, voice, stories, or ad referrals)."""
         start_time = time.time()
 
         # Skill 7: Check if lawyer manual takeover pause is active
@@ -108,24 +114,7 @@ class InstagramAutomationService:
         # Skill 2: Update 24h inbound activity window
         last_inbound = await self.contact_skill.update_inbound_activity(sender_id, redis_client)
 
-        # Extract text or process audio voice DM
-        user_text = message_data.get("text") or ""
-        attachments = message_data.get("attachments") or []
-
-        # Skill 6: Multimodal Voice DM processing
-        if not user_text and attachments:
-            for att in attachments:
-                if self.voice_skill.is_voice_attachment(att):
-                    audio_url = self.voice_skill.extract_audio_url(att)
-                    if audio_url:
-                        # In production we download audio, here we check if raw bytes exist or transcribe
-                        user_text = await self._download_and_transcribe_audio(audio_url)
-                        break
-
-        if not user_text:
-            return []
-
-        # Database Persistence: Get or create Instagram user and log inbound message
+        # Database Persistence: Get or create Instagram user
         db_user = None
         if db_session is not None:
             try:
@@ -133,6 +122,79 @@ class InstagramAutomationService:
                     session=db_session,
                     instagram_id=sender_id,
                 )
+            except Exception as e:  # noqa: BLE001
+                logger.error("DB persistence error on fetching user %s: %s", sender_id, e)
+
+        # Skill 10: Check for Instagram Story Mention
+        if self.trigger_skill.is_story_mention(message_data):
+            story_resp = self.trigger_skill.get_story_mention_response()
+            chunks = await self._dispatch_response_chunks(sender_id, story_resp, last_inbound, redis_client, start_time)
+            if db_session is not None and db_user is not None:
+                try:
+                    await InstagramPersistenceService.record_inbound_message(
+                        session=db_session,
+                        user=db_user,
+                        text="[Story Mention]",
+                        message_type="story_mention",
+                        instagram_message_id=str(message_data.get("mid") or ""),
+                    )
+                    for chunk in chunks:
+                        await InstagramPersistenceService.record_outbound_message(
+                            session=db_session,
+                            user=db_user,
+                            text=chunk,
+                            sender_type="bot",
+                        )
+                    await db_session.commit()
+                except Exception as e:  # noqa: BLE001
+                    logger.error("DB error recording story mention: %s", e)
+            return chunks
+
+        # Extract text or process audio voice DM
+        user_text = message_data.get("text") or ""
+        attachments = message_data.get("attachments") or []
+
+        # Skill 10: Check Click-to-Direct Ad Referral
+        ad_referral = self.trigger_skill.extract_ad_referral(message_data, event_data)
+        if ad_referral and not user_text and not attachments:
+            ad_resp = self.trigger_skill.get_ad_referral_greeting(ad_referral.get("ad_title"))
+            chunks = await self._dispatch_response_chunks(sender_id, ad_resp, last_inbound, redis_client, start_time)
+            if db_session is not None and db_user is not None:
+                try:
+                    await InstagramPersistenceService.record_inbound_message(
+                        session=db_session,
+                        user=db_user,
+                        text=f"[Ad Click: {ad_referral.get('ad_title') or ad_referral.get('ad_id')}]",
+                        message_type="ad_referral",
+                        instagram_message_id=str(message_data.get("mid") or ""),
+                    )
+                    for chunk in chunks:
+                        await InstagramPersistenceService.record_outbound_message(
+                            session=db_session,
+                            user=db_user,
+                            text=chunk,
+                            sender_type="bot",
+                        )
+                    await db_session.commit()
+                except Exception as e:  # noqa: BLE001
+                    logger.error("DB error recording ad referral greeting: %s", e)
+            return chunks
+
+        # Skill 6: Multimodal Voice DM processing
+        if not user_text and attachments:
+            for att in attachments:
+                if self.voice_skill.is_voice_attachment(att):
+                    audio_url = self.voice_skill.extract_audio_url(att)
+                    if audio_url:
+                        user_text = await self._download_and_transcribe_audio(audio_url)
+                        break
+
+        if not user_text:
+            return []
+
+        # Database Persistence: Log inbound message
+        if db_session is not None and db_user is not None:
+            try:
                 await InstagramPersistenceService.record_inbound_message(
                     session=db_session,
                     user=db_user,
@@ -155,8 +217,15 @@ class InstagramAutomationService:
                         user=db_user,
                         phone_number=extracted_phone,
                     )
+                    # Phase 6: Notify Telegram supergroup forum / admin group
+                    await GroupNotificationService.notify_instagram_lead(
+                        bot=bot,
+                        session=db_session,
+                        user=db_user,
+                        message_text=user_text,
+                    )
                 except Exception as e:  # noqa: BLE001
-                    logger.error("DB persistence error on phone update: %s", e)
+                    logger.error("DB persistence / Telegram alert error on phone update: %s", e)
 
         # Skill 3: Intercept personal non-legal questions
         if self.persona_skill.is_personal_question(user_text):
@@ -226,9 +295,32 @@ class InstagramAutomationService:
                             sender_type="bot",
                         )
                     await db_session.commit()
+                    # Phase 6: Urgent Telegram SOS Alert
+                    await GroupNotificationService.notify_instagram_sos(
+                        bot=bot,
+                        session=db_session,
+                        user=db_user,
+                        question=user_text,
+                        risk_score=_risk_score,
+                        risk_level=risk_level.value,
+                    )
                 except Exception as e:  # noqa: BLE001
-                    logger.error("DB persistence error on SOS dispatch: %s", e)
+                    logger.error("DB persistence / Telegram alert error on SOS dispatch: %s", e)
             return chunks
+
+        # If High Risk: Also trigger high-priority Telegram alert for lawyer attention
+        if risk_level == RiskLevel.HIGH and db_session is not None and db_user is not None:
+            try:
+                await GroupNotificationService.notify_instagram_sos(
+                    bot=bot,
+                    session=db_session,
+                    user=db_user,
+                    question=user_text,
+                    risk_score=_risk_score,
+                    risk_level=risk_level.value,
+                )
+            except Exception as e:  # noqa: BLE001
+                logger.warning("Failed sending high-risk Instagram alert: %s", e)
 
         # Skill 5: Lex.uz RAG retrieval
         articles = await self.rag_skill.retrieve_top_articles(user_text, limit=2, db_session=db_session)
@@ -373,3 +465,53 @@ class InstagramAutomationService:
         except Exception as e:  # noqa: BLE001
             logger.error("Failed downloading audio from %s: %s", audio_url, e)
         return ""
+
+    async def send_manual_lawyer_reply(
+        self,
+        sender_id: str,
+        text: str,
+        redis_client: Any | None = None,
+        db_session: Any | None = None,
+    ) -> bool:
+        """Lawyer sends manual reply from web admin panel: sets 30-min AI pause, checks 24h window, sends."""
+        # 1. Activate 30-min AI pause in Redis
+        if redis_client is not None:
+            await self.handoff_skill.set_lawyer_takeover(sender_id, redis_client)
+
+        # 2. Check last inbound timestamp to determine if HUMAN_AGENT tag is needed
+        last_inbound = 0.0
+        if redis_client is not None:
+            last_inbound = await self.contact_skill.get_last_inbound_timestamp(sender_id, redis_client) or 0.0
+        now = time.time()
+        use_tag = self.handoff_skill.should_use_human_agent_tag(last_inbound, now) if last_inbound > 0 else True
+
+        payload = self.handoff_skill.build_outbound_payload(
+            recipient_id=sender_id,
+            text=text,
+            use_human_agent_tag=use_tag,
+        )
+
+        success = await self._send_meta_request(
+            endpoint=f"/{settings.INSTAGRAM_GRAPH_API_VERSION}/me/messages",
+            method="POST",
+            json_body=payload,
+            redis_client=redis_client,
+        )
+
+        if success and db_session is not None:
+            try:
+                db_user = await InstagramPersistenceService.get_or_create_user(
+                    session=db_session,
+                    instagram_id=sender_id,
+                )
+                await InstagramPersistenceService.record_outbound_message(
+                    session=db_session,
+                    user=db_user,
+                    text=text,
+                    sender_type="lawyer",
+                )
+                await db_session.commit()
+            except Exception as e:  # noqa: BLE001
+                logger.error("Failed recording manual lawyer reply to DB: %s", e)
+
+        return success

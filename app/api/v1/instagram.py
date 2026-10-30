@@ -6,11 +6,13 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
 from fastapi.responses import PlainTextResponse
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.redis import get_redis_client
 from app.db.session import get_db_session
+from app.services.chat_service import ChatService
 from app.services.instagram.security import verify_meta_hub_signature
 from app.services.instagram.service import InstagramAutomationService
 
@@ -91,6 +93,76 @@ async def handle_instagram_webhook_events(
                     message_data=message_data,
                     redis_client=redis_client,
                     db_session=db_session,
+                    event_data=event,
                 )
 
     return {"status": "ok"}
+
+
+class InstagramSendRequest(BaseModel):
+    instagram_id: str
+    text: str
+
+
+class InstagramPauseRequest(BaseModel):
+    instagram_id: str
+    pause: bool = True
+    duration_minutes: int = 30
+
+
+@router.get("/chats")
+async def list_instagram_chats(
+    db_session: AsyncSession = Depends(get_db_session),  # noqa: B008
+    limit: int = 50,
+) -> list[dict[str, Any]]:
+    """List Instagram-specific conversations with client details and message stats."""
+    dialogs = await ChatService.get_dialogs_list(session=db_session, limit=limit)
+    return [
+        d for d in dialogs
+        if d.get("platform") in ("instagram", "both") or d.get("instagram_id")
+    ]
+
+
+@router.post("/send", status_code=status.HTTP_201_CREATED)
+async def send_manual_instagram_reply(
+    payload: InstagramSendRequest,
+    redis_client: Any = Depends(get_redis_client),  # noqa: B008
+    db_session: AsyncSession = Depends(get_db_session),  # noqa: B008
+) -> dict[str, Any]:
+    """Lawyer sends manual message to Instagram lead from admin dashboard (activates 30-min AI pause)."""
+    if not payload.text or not payload.text.strip():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Message text cannot be empty")
+
+    success = await _instagram_service.send_manual_lawyer_reply(
+        sender_id=payload.instagram_id.strip(),
+        text=payload.text.strip(),
+        redis_client=redis_client,
+        db_session=db_session,
+    )
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to send message via Meta Graph API",
+        )
+    return {"ok": True, "instagram_id": payload.instagram_id}
+
+
+@router.post("/pause")
+async def toggle_instagram_ai_pause(
+    payload: InstagramPauseRequest,
+    redis_client: Any = Depends(get_redis_client),  # noqa: B008
+) -> dict[str, Any]:
+    """Pause or resume AI automated responses for a specific Instagram conversation."""
+    ig_id = payload.instagram_id.strip()
+    if payload.pause:
+        await _instagram_service.handoff_skill.set_lawyer_takeover(
+            chat_id=ig_id,
+            redis_client=redis_client,
+            pause_seconds=max(60, payload.duration_minutes * 60),
+        )
+    else:
+        await _instagram_service.handoff_skill.resume_ai(
+            chat_id=ig_id,
+            redis_client=redis_client,
+        )
+    return {"ok": True, "instagram_id": ig_id, "paused": payload.pause}

@@ -60,6 +60,24 @@ async def run_retargeting_job() -> None:
         logger.error("Error running retargeting job: %s", e)
 
 
+async def run_instagram_window_watcher_job() -> None:
+    """Quarter-hourly background job monitoring 24h Instagram window expirations and warnings."""
+    try:
+        from app.core.redis import get_redis_client
+        from app.services.instagram.window_watcher import InstagramWindowWatcherService
+
+        redis_client = await get_redis_client()
+        async with AsyncSessionLocal() as session:
+            count = await InstagramWindowWatcherService.run_window_check(
+                session=session,
+                redis_client=redis_client,
+            )
+            if count > 0:
+                logger.info("Instagram window watcher sent %d closing warnings", count)
+    except Exception as e:  # noqa: BLE001
+        logger.error("Error in instagram_window_watcher_job: %s", e)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan managing startup and shutdown tasks."""
@@ -80,8 +98,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         except Exception as e:  # noqa: BLE001
             logger.warning("Could not set webhook (proceeding in local mode): %s", e)
 
-    # 3. Start background lead nurturing scheduler (every 60 minutes)
+    # 3. Start background lead nurturing & Instagram window watcher schedulers
     scheduler.add_job(run_retargeting_job, "interval", minutes=60, id="retargeting_job")
+    scheduler.add_job(run_instagram_window_watcher_job, "interval", minutes=15, id="ig_window_watcher_job")
     scheduler.start()
     logger.info("Started background APScheduler")
 

@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.bot_instance import bot
+from app.core.redis import get_redis_client
 from app.db.session import get_db_session
 from app.services.chat_service import ChatService
 
@@ -56,8 +57,9 @@ async def send_lawyer_reply(
     user_id: int,
     payload: SendMessageRequest,
     session: Annotated[AsyncSession, Depends(get_db_session)],
+    redis_client: Annotated[Any, Depends(get_redis_client)],
 ) -> dict[str, Any]:
-    """Lawyer sends a direct reply to the client via Telegram Bot from the admin dashboard."""
+    """Lawyer sends a direct reply to the client via Telegram Bot or Instagram Direct from the admin dashboard."""
     if not payload.text or not payload.text.strip():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Message text cannot be empty"
@@ -69,6 +71,7 @@ async def send_lawyer_reply(
             bot=bot,
             user_id=user_id,
             text=payload.text.strip(),
+            redis_client=redis_client,
         )
         return {
             "ok": True,
