@@ -1,4 +1,4 @@
-# TEXNIK TOPSHIRIQ (Technical Specification v5.0)
+# TEXNIK TOPSHIRIQ (Technical Specification v6.0)
 ## AI-Asosidagi LegalTech Telegram Bot & Web CRM Platformasi (Yurist)
 
 ---
@@ -191,8 +191,13 @@ Yurist guruhida har xil voqealar o'zining maxsus mavzulariga (Topic / Thread) yu
 
 ## 6. Web Admin Panel talablari (Next.js Dashboard)
 
-Admin panel quyidagi bo'limlardan iborat:
+Admin panel to'liq himoyalangan bo'lib, quyidagi bo'limlardan iborat:
 
+0. **Kirish va Xavfsizlik (`/login`):**
+   - Himoyalangan avtorizatsiya formasi (Username va Password).
+   - Backend `POST /api/v1/auth/login` orqali tekshirilib, 7 kunlik HMAC-SHA256 imzoli xavfsiz sessiya tokeni beriladi.
+   - Har qanday avtorizatsiyadan o'tmagan so'rovlar avtomatik `/login` sahifasiga yo'naltiriladi (Client & Server-side protection).
+   - Sidebar panelida "Chiqish" (Logout) tugmasi orqali sessiyani yakunlash.
 1. **Dashboard (`/`):**
    - Jami mijozlar, faol lidlar, xavf darajalari statistikasi (pirog grafik).
    - O'tgan 30 kunlik lidlar dinamikasi (chiziqli grafik).
@@ -220,10 +225,18 @@ Admin panel quyidagi bo'limlardan iborat:
    - Bot ishga tushayotganda `TelegramConflictError` (ikki nusxa ishlaganda) yoki `TelegramUnauthorizedError` (token xato bo'lsa) butun FastAPI serverini qulatmasligi, xavfsiz kutish sikliga ega bo'lishi shart.
 2. **Tarmoq nosozliklari:**
    - Har qanday `TelegramNetworkError` yuz berganda 3-5 soniya ichida avtomatik qayta ulanishi kerak.
-3. **Yashirin kalitlar:**
-   - Barcha API kalitlar (`BOT_TOKEN`, `GEMINI_API_KEY`, `DATABASE_URL`, `REDIS_URL`) faqat `.env` orqali berilishi, git repozitoriyasiga hech qachon tushmasligi shart.
-4. **Kod sifat me'yorlari:**
-   - Barcha Python funksiyalari to'liq Type Hinting (`mypy`) bilan qoplanishi kerak.
+3. **Yashirin kalitlar va Konfiguratsiya:**
+   - Barcha API kalitlar (`BOT_TOKEN`, `GEMINI_API_KEY`, `DATABASE_URL`, `REDIS_URL`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `ADMIN_SESSION_SECRET`) faqat `.env` orqali berilishi, git repozitoriyasiga tushmasligi shart.
+4. **API va Dashboard Himoyasi:**
+   - Barcha sezgir ma'muriy REST endpointlar (`/api/v1/crm`, `/dashboard`, `/services`, `/helplines`, `/channels`, `/chats`, `/settings`, `/transactions`) `verify_admin_access` orqali Bearer sessiya tokeni yoki `X-Admin-Key` bilan himoyalangan bo'lishi shart.
+5. **Webhook Xavfsizligi:**
+   - Telegram Webhook so'rovlari `X-Telegram-Bot-Api-Secret-Token` sarlavhasi orqali `hmac.compare_digest` yordamida doimiy vaqtli taqqoslanadi. Maxfiy token kiritilmagan yoki noto'g'ri bo'lgan so'rovlar qat'iyan rad etiladi (Fail-closed).
+6. **Prompt Injection Himoyasi:**
+   - LLM'ga uzatiladigan tashqi foydalanuvchi murojaatlari va yuklangan hujjat matnlari `<client_inquiry>` va `<document_content>` teglari ichiga olinadi. Tizim instruksiyalari foydalanuvchi matnidagi hech qanday manipulyativ buyruqlarni ijro etmaslik uchun qat'iy izolyatsiya qilingan.
+7. **Bot Spam va Throttling Himoyasi:**
+   - Har bir foydalanuvchi uchun 1.5 soniyalik sliding-window so'rovlar limiti (`ThrottlingMiddleware`) o'rnatilgan. Redis mavjud bo'lmaganda in-memory fallback ishlaydi. Advokat va adminlar ushbu cheklovdan ozod qilingan.
+8. **Kod sifat me'yorlari:**
+   - Barcha Python funksiyalari to'liq Type Hinting (`mypy`) bilan qoplangan bo'lishi kerak.
    - Kod `ruff` linter qoidalariga to'liq mos bo'lishi va barcha `pytest` unit/integratsion testlaridan 100% muvaffaqiyatli o'tishi shart.
 
 ---
