@@ -14,6 +14,7 @@ from app.api.v1.crm import router as crm_router
 from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1.health import router as health_router
 from app.api.v1.helplines import router as helplines_router
+from app.api.v1.instagram import router as instagram_router
 from app.api.v1.mandatory_channels import router as channels_router
 from app.api.v1.services import router as services_router
 from app.api.v1.settings import router as settings_router
@@ -117,6 +118,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router, prefix="/api/v1")
     app.include_router(auth_router, prefix="/api/v1")
     app.include_router(webhook_router, prefix="/api/v1")
+    app.include_router(instagram_router, prefix="/api/v1")
     app.include_router(crm_router, prefix="/api/v1", dependencies=admin_auth)
     app.include_router(dashboard_router, prefix="/api/v1", dependencies=admin_auth)
     app.include_router(services_router, prefix="/api/v1", dependencies=admin_auth)

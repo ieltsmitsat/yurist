@@ -78,5 +78,13 @@ class Settings(BaseSettings):
     REFERRAL_BONUS_QUESTIONS: int = 1
     INQUIRY_DEBOUNCE_SECONDS: float = 3.0  # seconds to aggregate consecutive messages
 
+    # Instagram DM Automation
+    INSTAGRAM_PAGE_ID: str = Field(default="")
+    INSTAGRAM_ACCESS_TOKEN: str = Field(default="")
+    INSTAGRAM_VERIFY_TOKEN: str = Field(default="yurist_instagram_verify_token")
+    INSTAGRAM_GRAPH_API_VERSION: str = "v21.0"
+    INSTAGRAM_RATE_LIMIT_PER_HOUR: int = 750
+
+
 
 settings = Settings()
